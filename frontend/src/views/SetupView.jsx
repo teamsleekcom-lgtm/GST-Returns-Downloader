@@ -32,13 +32,20 @@ const SetupView = () => {
         const scriptContent = [
             "@echo off",
             "echo Setting up GST Returns Downloader Engine...",
+            "echo Please wait while we configure your secure local environment.",
             "mkdir \"%USERPROFILE%\\GST_Engine\" 2>nul",
             "cd /d \"%USERPROFILE%\\GST_Engine\"",
-            "curl -sL \"https://raw.githubusercontent.com/teams/GST-Returns-Downloader/master/engine/main.py\" -o main.py",
+            "echo Downloading core engine...",
+            "curl -sL \"https://raw.githubusercontent.com/teamsleekcom-lgtm/GST-Returns-Downloader/master/engine/main.py\" -o main.py",
+            "echo Setting up Python environment (this may take 1-2 minutes)...",
             "python -m venv venv",
             "call .\\venv\\Scripts\\Activate.bat",
-            "pip install fastapi uvicorn selenium",
+            "echo Installing dependencies...",
+            "pip install fastapi uvicorn selenium >nul 2>&1",
+            "echo Starting background engine...",
             "start \"\" pythonw -m uvicorn main:app --port 7842",
+            "echo Done! You may close this window or it will close automatically.",
+            "timeout /t 3 >nul",
             "exit"
         ].join("\\n");
 
