@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import MainLayout from '../components/layout/MainLayout';
-import MainLayout from '../components/layout/MainLayout';
 import { getClients, saveClients } from '../services/clientService';
 import { clearHistory } from '../services/historyService';
 import { Save, Download, Upload, Trash2, AlertCircle } from 'lucide-react';

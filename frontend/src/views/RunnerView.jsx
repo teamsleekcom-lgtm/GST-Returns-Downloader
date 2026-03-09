@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
-import MainLayout from '../components/layout/MainLayout';
 import { Pause, SkipForward, Square, CheckCircle, Clock, Loader2, AlertTriangle } from 'lucide-react';
 import { addHistoryRecord } from '../services/historyService';
 import './RunnerView.css';
