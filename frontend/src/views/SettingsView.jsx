@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import MainLayout from '../components/layout/MainLayout';
+import MainLayout from '../components/layout/MainLayout';
 import { getClients, saveClients } from '../services/clientService';
+import { clearHistory } from '../services/historyService';
 import { Save, Download, Upload, Trash2, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -28,6 +30,7 @@ const SettingsView = () => {
     const clearAllData = () => {
         if (window.confirm("WARNING: This will delete ALL clients and history permanently. Are you absolutely sure?")) {
             saveClients([]);
+            clearHistory();
             alert("All client data has been cleared.");
             window.location.reload();
         }

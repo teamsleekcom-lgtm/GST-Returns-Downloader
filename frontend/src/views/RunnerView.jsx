@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
+import MainLayout from '../components/layout/MainLayout';
 import { Pause, SkipForward, Square, CheckCircle, Clock, Loader2, AlertTriangle } from 'lucide-react';
+import { addHistoryRecord } from '../services/historyService';
 import './RunnerView.css';
 
 const RunnerView = () => {
@@ -76,8 +78,32 @@ const RunnerView = () => {
                     setTimeLeft(120);
                 } else if (data.type === 'done') {
                     addLog('Download run complete.', 'success');
-                    setClients(prev => prev.map(c => c.status === 'In Progress' ? { ...c, status: 'Completed' } : c));
-                    source.close();
+                    setClients(prev => {
+                        const updatedClients = prev.map(c => c.status === 'In Progress' ? { ...c, status: 'Completed' } : c);
+
+                        // Calculate final stats
+                        const failedCount = updatedClients.filter(c => c.status === 'Failed').length;
+                        const finalStatus = failedCount === 0 ? 'Completed' : (failedCount === updatedClients.length ? 'Failed' : 'Partial');
+
+                        // Extract completedFiles directly from the current state variable by using the setter callback trick to get latest,
+                        // or just rely on the fact that if we use a ref it's easier. For now, since it updates sequentially, 
+                        // we can estimate from totalFiles.
+
+                        source.close();
+                        return updatedClients;
+                    });
+
+                    // We need to wait for setCompletedFiles to settle or just use a rough estimate if we are mocking
+                    // To ensure we get the latest value without complex refs, let's use a function inside setCompletedFiles
+                    setCompletedFiles(latestCompleted => {
+                        addHistoryRecord({
+                            clients: payload.clients.length,
+                            files: latestCompleted,
+                            duration: '0m', // Calculate real duration if needed in future
+                            status: latestCompleted === 0 ? 'Failed' : (latestCompleted < totalFiles ? 'Partial' : 'Completed')
+                        });
+                        return latestCompleted;
+                    });
                 }
             } catch (err) {
                 addLog(e.data, 'info');

@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import { Download, Search, LayoutDashboard } from 'lucide-react';
+import { getHistory } from '../services/historyService';
 import * as XLSX from 'xlsx';
 
 const HistoryView = () => {
-    // Mock data. In production, this would come from localStorage.
-    const [history, setHistory] = useState([
-        { id: 'R-1005', date: '2024-10-24 10:42 AM', clients: 45, files: 135, duration: '14m 20s', status: 'Completed' },
-        { id: 'R-1004', date: '2024-10-23 04:15 PM', clients: 12, files: 36, duration: '4m 10s', status: 'Completed' },
-        { id: 'R-1003', date: '2024-10-20 11:30 AM', clients: 80, files: 210, duration: '45m 00s', status: 'Partial' },
-        { id: 'R-1002', date: '2024-10-18 09:00 AM', clients: 5, files: 0, duration: '1m 20s', status: 'Failed' },
-        { id: 'R-1001', date: '2024-10-15 02:20 PM', clients: 142, files: 420, duration: '1h 22m', status: 'Completed' },
-    ]);
+    const [history, setHistory] = useState([]);
+
+    useEffect(() => {
+        setHistory(getHistory());
+    }, []);
 
     const [expandedId, setExpandedId] = useState(null);
 
@@ -77,10 +75,10 @@ const HistoryView = () => {
                                                     <p className="text-sm text-muted mb-4">Clicking export above will include this granular data.</p>
                                                     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                                         <div className="p-3 border rounded text-sm bg-success text-success-text" style={{ backgroundColor: 'var(--success-bg)' }}>
-                                                            <strong>Completed:</strong> 135 files downloaded successfully across 45 clients.
+                                                            <strong>Completed:</strong> {run.files} files downloaded successfully across {run.clients} clients.
                                                         </div>
                                                         <div className="p-3 border rounded text-sm bg-warning text-warning-text" style={{ backgroundColor: 'var(--warning-bg)' }}>
-                                                            <strong>Skipped:</strong> 4 files skipped (Already existed).
+                                                            <strong>Logs:</strong> See debug logs for any skipped files.
                                                         </div>
                                                     </div>
                                                 </div>
