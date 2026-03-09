@@ -29,8 +29,21 @@ const SetupView = () => {
     const handleDownload = () => {
         // In production, this would point to a real .bat or .exe hosted online
         // For now, we simulate a file download placeholder
+        const scriptContent = [
+            "@echo off",
+            "echo Setting up GST Returns Downloader Engine...",
+            "mkdir \"%USERPROFILE%\\GST_Engine\" 2>nul",
+            "cd /d \"%USERPROFILE%\\GST_Engine\"",
+            "curl -sL \"https://raw.githubusercontent.com/teams/GST-Returns-Downloader/master/engine/main.py\" -o main.py",
+            "python -m venv venv",
+            "call .\\venv\\Scripts\\Activate.bat",
+            "pip install fastapi uvicorn selenium",
+            "start \"\" pythonw -m uvicorn main:app --port 7842",
+            "exit"
+        ].join("\\n");
+
         const element = document.createElement("a");
-        const file = new Blob(["@echo off\npython -m venv venv\n.\\venv\\Scripts\\Activate.bat\npip install fastapi uvicorn selenium\nuvicorn main:app --port 7842\n"], { type: 'text/plain' });
+        const file = new Blob([scriptContent], { type: 'text/plain' });
         element.href = URL.createObjectURL(file);
         element.download = "GST_Setup.bat";
         document.body.appendChild(element); // Required for this to work in FireFox
