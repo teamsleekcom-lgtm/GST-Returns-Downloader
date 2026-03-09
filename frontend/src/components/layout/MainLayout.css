@@ -1,0 +1,19 @@
+.layout-container {
+    display: flex;
+    min-height: 100vh;
+    background-color: var(--bg-color);
+}
+
+.layout-content {
+    flex: 1;
+    margin-left: 260px;
+    /* matches sidebar width */
+    display: flex;
+    flex-direction: column;
+}
+
+.layout-main {
+    padding: var(--spacing-8);
+    flex: 1;
+    overflow-y: auto;
+}

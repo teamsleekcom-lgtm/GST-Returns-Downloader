@@ -1,0 +1,170 @@
+.setup-container {
+    min-height: 100vh;
+    background-color: var(--bg-color);
+    padding: var(--spacing-4);
+}
+
+.setup-card {
+    max-width: 500px;
+    width: 100%;
+}
+
+.setup-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text-main);
+}
+
+.setup-subtitle {
+    text-align: center;
+    color: var(--text-muted);
+    margin-top: var(--spacing-2);
+    margin-bottom: var(--spacing-6);
+}
+
+.steps-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6);
+}
+
+.step-item {
+    display: flex;
+    gap: var(--spacing-4);
+    opacity: 0.5;
+    transition: opacity var(--transition-normal);
+}
+
+.step-item.active {
+    opacity: 1;
+}
+
+.step-item.pending {
+    opacity: 0.3;
+}
+
+.step-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    background-color: var(--neutral-bg);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.step-item.active .step-icon {
+    background-color: var(--primary-100);
+    color: var(--primary-600);
+}
+
+.text-success {
+    color: var(--success-text);
+}
+
+.step-content h3 {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: var(--spacing-1);
+}
+
+.instruction-text {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.mt-2 {
+    margin-top: var(--spacing-2);
+}
+
+.mt-3 {
+    margin-top: var(--spacing-3);
+}
+
+.mt-4 {
+    margin-top: var(--spacing-4);
+}
+
+.waiting-message {
+    gap: var(--spacing-2);
+    color: var(--primary-600);
+    font-size: 0.9rem;
+    font-weight: 500;
+    background-color: var(--primary-50);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-md);
+    animation: pulse 2s infinite ease-in-out;
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+.progress-container {
+    width: 100%;
+}
+
+.progress-bar-animated {
+    height: 6px;
+    width: 100%;
+    background-color: var(--primary-100);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar-animated::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 40%;
+    background-color: var(--primary-500);
+    border-radius: var(--radius-full);
+    animation: indeterminate 1.5s infinite ease-in-out;
+}
+
+.progress-text {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.7;
+    }
+}
+
+@keyframes indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(300%);
+    }
+}

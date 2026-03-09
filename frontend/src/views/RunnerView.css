@@ -1,0 +1,150 @@
+.runner-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 140px);
+}
+
+.progress-bar-bg {
+    height: 8px;
+    background-color: var(--primary-100);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    width: 100%;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: var(--primary-600);
+    border-radius: var(--radius-full);
+    transition: width var(--transition-normal);
+}
+
+.runner-grid {
+    display: flex;
+    gap: var(--spacing-6);
+    flex: 1;
+    min-height: 0;
+}
+
+.queue-panel {
+    width: 300px;
+    flex-shrink: 0;
+}
+
+.queue-list {
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.queue-item {
+    padding: var(--spacing-3) var(--spacing-4);
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--surface-color);
+    transition: background-color var(--transition-fast);
+}
+
+.queue-item:last-child {
+    border-bottom: none;
+}
+
+.active-queue-item {
+    background-color: var(--primary-50);
+    border-left: 3px solid var(--primary-500);
+}
+
+.queue-status {
+    display: flex;
+    align-items: center;
+}
+
+.mx-1 {
+    margin-left: var(--spacing-1);
+    margin-right: var(--spacing-1);
+}
+
+.gap-6 {
+    gap: var(--spacing-6);
+}
+
+.gap-3 {
+    gap: var(--spacing-3);
+}
+
+/* Captcha Banner */
+.bg-warning {
+    background-color: #fffbeb;
+    border-color: #fde68a;
+    border-width: 2px;
+}
+
+.text-warning-icon {
+    color: #d97706;
+}
+
+.text-warning-title {
+    color: #92400e;
+}
+
+.text-warning-text {
+    color: #b45309;
+}
+
+.pulsing {
+    animation: gentle-pulse 2s infinite ease-in-out;
+}
+
+@keyframes gentle-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(253, 230, 138, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(253, 230, 138, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(253, 230, 138, 0);
+    }
+}
+
+.max-w-sm {
+    max-width: 300px;
+    width: 100%;
+}
+
+/* Logs Container */
+.bg-code {
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border-radius: var(--radius-md);
+    overflow-y: auto;
+    padding: var(--spacing-4);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+}
+
+.log-entry {
+    margin-bottom: var(--spacing-1);
+    line-height: 1.4;
+}
+
+.log-time {
+    color: #94a3b8;
+}
+
+.log-info .log-msg {
+    color: #e2e8f0;
+}
+
+.log-error .log-msg {
+    color: #f87171;
+}
+
+.log-success .log-msg {
+    color: #4ade80;
+}
+
+.log-warning .log-msg {
+    color: #fbbf24;
+}

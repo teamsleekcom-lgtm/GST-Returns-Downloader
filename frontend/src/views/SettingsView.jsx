@@ -1,0 +1,126 @@
+import React, { useState } from 'react';
+import MainLayout from '../components/layout/MainLayout';
+import { getClients, saveClients } from '../services/clientService';
+import { Save, Download, Upload, Trash2, AlertCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
+
+const SettingsView = () => {
+    const [saveLocation, setSaveLocation] = useState('C:\\GST_Downloads');
+    const [defaultFy, setDefaultFy] = useState('2024-25');
+    const [autoOrganise, setAutoOrganise] = useState(true);
+
+    const handleSaveSettings = () => {
+        alert("Settings saved successfully.");
+    };
+
+    const handleExportData = () => {
+        const clients = getClients();
+        if (clients.length === 0) {
+            alert("No clients to export.");
+            return;
+        }
+        const ws = XLSX.utils.json_to_sheet(clients);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Clients Backup");
+        XLSX.writeFile(wb, "GST_Clients_Backup.xlsx");
+    };
+
+    const clearAllData = () => {
+        if (window.confirm("WARNING: This will delete ALL clients and history permanently. Are you absolutely sure?")) {
+            saveClients([]);
+            alert("All client data has been cleared.");
+            window.location.reload();
+        }
+    };
+
+    return (
+        <MainLayout title="Settings">
+            <div className="settings-container max-w-4xl mx-auto" style={{ maxWidth: '800px' }}>
+
+                {/* General Settings */}
+                <div className="card mb-6">
+                    <h3 className="section-title mb-4">General Preferences</h3>
+
+                    <div className="form-group mb-5">
+                        <label>Default Save Location</label>
+                        <div className="flex-between gap-2 mt-1">
+                            <input
+                                type="text"
+                                className="input-field"
+                                value={saveLocation}
+                                onChange={e => setSaveLocation(e.target.value)}
+                            />
+                            <button className="btn-secondary" style={{ whiteSpace: 'nowrap' }}>Browse Folder</button>
+                        </div>
+                    </div>
+
+                    <div className="form-group mb-5">
+                        <label>Default Financial Year</label>
+                        <select className="input-field mt-1" value={defaultFy} onChange={e => setDefaultFy(e.target.value)}>
+                            <option value="2024-25">2024-25</option>
+                            <option value="2023-24">2023-24</option>
+                            <option value="2022-23">2022-23</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group mb-5">
+                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={autoOrganise} onChange={e => setAutoOrganise(e.target.checked)} />
+                            <span className="font-medium">Auto-organise into subfolders</span>
+                        </label>
+                        <p className="text-sm text-muted ml-6 mt-1">Files will be saved into FolderName \ FirmName \ FY \ file.pdf</p>
+                    </div>
+
+                    <div className="flex mt-6" style={{ justifyContent: 'flex-end' }}>
+                        <button className="btn-primary" onClick={handleSaveSettings}>
+                            <Save size={18} /> Save Settings
+                        </button>
+                    </div>
+                </div>
+
+                {/* Data Management */}
+                <div className="card">
+                    <h3 className="section-title mb-4">Data Management</h3>
+                    <p className="text-muted text-sm mb-6">Backup or restore your local database. All data is encrypted locally on your browser.</p>
+
+                    <div className="data-actions flex-col" style={{ gap: '1rem' }}>
+                        <div className="flex-between p-4 border rounded" style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                            <div>
+                                <h4 className="font-medium">Export Database</h4>
+                                <p className="text-sm text-muted">Download all clients as an encrypted Excel file.</p>
+                            </div>
+                            <button className="btn-secondary" onClick={handleExportData}>
+                                <Download size={18} /> Export Backup
+                            </button>
+                        </div>
+
+                        <div className="flex-between p-4 border rounded" style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                            <div>
+                                <h4 className="font-medium">Import Database</h4>
+                                <p className="text-sm text-muted">Restore clients from a previous backup file.</p>
+                            </div>
+                            <button className="btn-secondary">
+                                <Upload size={18} /> Restore Backup
+                            </button>
+                        </div>
+
+                        <div className="flex-between p-4 border rounded" style={{ border: '1px solid var(--error-bg)', backgroundColor: '#fff5f5', borderRadius: 'var(--radius-md)' }}>
+                            <div>
+                                <h4 className="font-medium text-error flex-center" style={{ justifyContent: 'flex-start', gap: '0.5rem' }}>
+                                    <AlertCircle size={16} /> Danger Zone
+                                </h4>
+                                <p className="text-sm" style={{ color: '#c53030' }}>Permanently delete all clients and history from this browser.</p>
+                            </div>
+                            <button className="btn-secondary text-error" onClick={clearAllData} style={{ borderColor: 'var(--error-bg)' }}>
+                                <Trash2 size={18} /> Clear Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </MainLayout>
+    );
+};
+
+export default SettingsView;
