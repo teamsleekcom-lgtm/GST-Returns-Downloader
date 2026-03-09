@@ -3,13 +3,13 @@ export const isEngineRunning = async () => {
     // Timeout applied to avoid long hangs when engine is offline
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
-    
-    const res = await fetch("http://127.0.0.1:7842/status", { 
+
+    const res = await fetch("http://localhost:7842/status", {
       method: "GET",
       signal: controller.signal
     });
     clearTimeout(timeoutId);
-    
+
     if (res.ok) {
       const data = await res.json();
       return data.status === "ready";

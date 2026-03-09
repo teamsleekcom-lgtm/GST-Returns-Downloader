@@ -46,7 +46,7 @@ const RunnerView = () => {
 
     const startEngine = async (payload) => {
         try {
-            await fetch('http://127.0.0.1:7842/download', {
+            await fetch('http://localhost:7842/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -58,7 +58,7 @@ const RunnerView = () => {
     };
 
     const connectSSE = () => {
-        const source = new EventSource('http://127.0.0.1:7842/stream');
+        const source = new EventSource('http://localhost:7842/stream');
         eventSourceRef.current = source;
 
         source.onmessage = (e) => {
@@ -95,7 +95,7 @@ const RunnerView = () => {
 
     const submitCaptcha = async () => {
         try {
-            await fetch('http://127.0.0.1:7842/captcha', {
+            await fetch('http://localhost:7842/captcha', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ captcha: captchaInput })
