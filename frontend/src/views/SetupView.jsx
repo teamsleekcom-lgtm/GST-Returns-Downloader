@@ -33,6 +33,8 @@ const SetupView = () => {
             "@echo off",
             "echo Setting up GST Returns Downloader Engine...",
             "echo Please wait while we configure your secure local environment.",
+            "echo Closing any existing background engine...",
+            "taskkill /f /im pythonw.exe >nul 2>&1",
             "mkdir \"%USERPROFILE%\\GST_Engine\" 2>nul",
             "cd /d \"%USERPROFILE%\\GST_Engine\"",
             "echo Downloading core engine...",
@@ -43,7 +45,7 @@ const SetupView = () => {
             "echo Installing dependencies...",
             "pip install fastapi uvicorn selenium >nul 2>&1",
             "echo Starting background engine...",
-            "start \"\" pythonw -m uvicorn main:app --port 7842",
+            "start \"\" pythonw -m uvicorn main:app --host 127.0.0.1 --port 7842",
             "echo Done! You may close this window or it will close automatically.",
             "timeout /t 3 >nul",
             "exit"
