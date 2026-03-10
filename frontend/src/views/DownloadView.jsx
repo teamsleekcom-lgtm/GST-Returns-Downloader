@@ -71,16 +71,23 @@ const DownloadView = () => {
     const handleStart = () => {
         if (selectedClients.length === 0 || selectedReturns.length === 0) return;
 
-        // Save to global context/state or localStorage before navigating
-        // Pass config payload to runner
+        const selectedClientData = clients.filter(c => selectedClients.includes(c.id));
         const payload = {
-            clients: clients.filter(c => selectedClients.includes(c.id)),
+            clients: selectedClientData,
             returns: selectedReturns,
             months: selectedMonths,
             fy,
             autoOrganise
         };
-        localStorage.setItem('active_download', JSON.stringify(payload));
+
+        // Store full payload in sessionStorage (only lasts while tab is open — more secure)
+        sessionStorage.setItem('active_download_full', JSON.stringify(payload));
+        // Store safe version in localStorage (no passwords) for UI display on refresh
+        const safePayload = {
+            ...payload,
+            clients: selectedClientData.map(({ password, ...rest }) => rest)
+        };
+        localStorage.setItem('active_download', JSON.stringify(safePayload));
         navigate('/runner');
     };
 

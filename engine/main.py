@@ -2,14 +2,20 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 app = FastAPI()
+
+# --- Static Frontend Serving ---
+# Serve the built React frontend from a 'dist' folder alongside main.py
+DIST_DIR = Path(__file__).parent / "dist"
 
 @app.middleware("http")
 async def cors_handler(request: Request, call_next):
@@ -33,12 +39,13 @@ class EngineState:
         self.captcha_solved = asyncio.Event()
         self.current_captcha = ""
         self.stop_requested = False
+        self.pause_requested = False
+        self.skip_requested = False
 
 state = EngineState()
 
 def init_driver(download_dir):
     options = webdriver.ChromeOptions()
-    # options.add_argument("--headless") # Headless would need captcha solving logic differently, let's keep it visible for now.
     options.add_argument("--window-size=1200,800")
     
     prefs = {
@@ -94,6 +101,9 @@ async def process_downloads(payload):
         for client in clients:
             if state.stop_requested:
                 break
+            
+            # Reset skip flag for each client
+            state.skip_requested = False
                 
             firm_name = client.get('name')
             username = client.get('username')
@@ -118,19 +128,21 @@ async def process_downloads(payload):
                 await asyncio.sleep(5)
                 await send_log(f"Login attempted for {firm_name}", "info")
                 
-                # At this point, in a full script, we would navigate to the returns dashboard
-                # and loop through returns and months.
-                
                 for ret in returns:
+                    if state.skip_requested or state.stop_requested:
+                        break
                     for month in (months if months else ["Annual"]):
-                        if state.stop_requested:
+                        if state.skip_requested or state.stop_requested:
                             break
+                        
+                        # Respect pause
+                        while state.pause_requested and not state.stop_requested:
+                            await asyncio.sleep(1)
                             
                         await send_log(f"Downloading {ret} for {month} FY {fy}...", "info")
-                        # MOCKING the actual click and download wait because portal layout isn't known
                         await asyncio.sleep(2) 
                         completed += 1
-                        await send_progress(firm_name, 1, total_files) # Sending 1 increments the counter in UI
+                        await send_progress(firm_name, 1, total_files)
                         
             except Exception as e:
                 await send_log(f"Error processing {firm_name}: {str(e)}", "error")
@@ -162,6 +174,8 @@ async def get_stream():
 async def start_download(request: Request):
     payload = await request.json()
     state.stop_requested = False
+    state.pause_requested = False
+    state.skip_requested = False
     
     # Start processing in background task
     asyncio.create_task(process_downloads(payload))
@@ -180,7 +194,33 @@ async def engine_control(request: Request):
     action = data.get("action")
     if action == "stop":
         state.stop_requested = True
-    return {"status": "acknowledged"}
+        state.pause_requested = False  # Unpause if paused so the loop can exit
+    elif action == "pause":
+        state.pause_requested = not state.pause_requested  # Toggle pause
+    elif action == "skip":
+        state.skip_requested = True
+    return {"status": "acknowledged", "action": action}
+
+# --- Serve built React frontend (SPA catch-all) ---
+# Mount static assets ONLY if dist folder exists
+if DIST_DIR.exists() and DIST_DIR.is_dir():
+    # Serve static assets (JS, CSS, images)
+    assets_dir = DIST_DIR / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+    
+    # SPA catch-all: serve index.html for any non-API route
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Try to serve actual files first
+        file_path = DIST_DIR / full_path
+        if full_path and file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        # Fall back to index.html for SPA routing
+        index_path = DIST_DIR / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text())
+        return Response("Frontend not built yet. Please run 'npm run build' in the frontend directory.", status_code=404)
 
 if __name__ == "__main__":
     import uvicorn

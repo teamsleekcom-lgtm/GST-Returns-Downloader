@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import { Pause, SkipForward, Square, CheckCircle, Clock, Loader2, AlertTriangle } from 'lucide-react';
 import { addHistoryRecord } from '../services/historyService';
+import { ENGINE_BASE } from '../services/config';
 import './RunnerView.css';
 
 const RunnerView = () => {
@@ -11,10 +12,12 @@ const RunnerView = () => {
 
     // Progress State
     const [completedFiles, setCompletedFiles] = useState(0);
-    const [totalFiles, setTotalFiles] = useState(0); // Estimated initially
-    const [clients, setClients] = useState([]); // With status Wait/Progress/Done/Fail
+    const [totalFiles, setTotalFiles] = useState(0);
+    const [clients, setClients] = useState([]);
     const [activeClient, setActiveClient] = useState(null);
     const [logs, setLogs] = useState([]);
+    const [isRunning, setIsRunning] = useState(false);
+    const [isDone, setIsDone] = useState(false);
 
     // Captcha
     const [captchaNeeded, setCaptchaNeeded] = useState(false);
@@ -23,13 +26,17 @@ const RunnerView = () => {
     const [timeLeft, setTimeLeft] = useState(120);
 
     const eventSourceRef = useRef(null);
+    // Refs to avoid stale closures in SSE callbacks
+    const configRef = useRef(null);
+    const totalFilesRef = useRef(0);
+    const startTimeRef = useRef(null);
 
-    const addLog = (msg, type = 'info') => {
+    const addLog = useCallback((msg, type = 'info') => {
         setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }]);
-    };
+    }, []);
 
-    const connectSSE = () => {
-        const source = new EventSource('http://127.0.0.1:7842/stream');
+    const connectSSE = useCallback(() => {
+        const source = new EventSource(`${ENGINE_BASE}/stream`);
         eventSourceRef.current = source;
 
         source.onmessage = (e) => {
@@ -43,34 +50,36 @@ const RunnerView = () => {
                     if (data.completed) setCompletedFiles(prev => prev + 1);
                 } else if (data.type === 'captcha') {
                     setCaptchaNeeded(true);
-                    setCaptchaMsg(data.message);
+                    setCaptchaMsg(data.message || 'Captcha required for login. See browser window.');
                     setTimeLeft(120);
                 } else if (data.type === 'done') {
                     addLog('Download run complete.', 'success');
+                    setIsRunning(false);
+                    setIsDone(true);
+
                     setClients(prev => {
                         const updatedClients = prev.map(c => c.status === 'In Progress' ? { ...c, status: 'Completed' } : c);
-
-                        // Calculate final stats
-                        const failedCount = updatedClients.filter(c => c.status === 'Failed').length;
-                        const _finalStatus = failedCount === 0 ? 'Completed' : (failedCount === updatedClients.length ? 'Failed' : 'Partial');
-
-                        // Extract completedFiles directly from the current state variable by using the setter callback trick to get latest,
-                        // or just rely on the fact that if we use a ref it's easier. For now, since it updates sequentially, 
-                        // we can estimate from totalFiles.
-
                         source.close();
                         return updatedClients;
                     });
 
-                    // We need to wait for setCompletedFiles to settle or just use a rough estimate if we are mocking
-                    // To ensure we get the latest value without complex refs, let's use a function inside setCompletedFiles
+                    // Use refs for latest values (avoids stale closure)
                     setCompletedFiles(latestCompleted => {
+                        const elapsed = startTimeRef.current ? Math.round((Date.now() - startTimeRef.current) / 60000) : 0;
+                        const durationStr = elapsed < 1 ? '<1m' : `${elapsed}m`;
+                        const total = totalFilesRef.current;
+                        const clientCount = configRef.current ? configRef.current.clients.length : 0;
+
                         addHistoryRecord({
-                            clients: config ? config.clients.length : 0,
+                            clients: clientCount,
                             files: latestCompleted,
-                            duration: '0m', // Calculate real duration if needed in future
-                            status: latestCompleted === 0 ? 'Failed' : (latestCompleted < totalFiles ? 'Partial' : 'Completed')
+                            duration: durationStr,
+                            status: latestCompleted === 0 ? 'Failed' : (latestCompleted < total ? 'Partial' : 'Completed')
                         });
+
+                        // Cleanup active_download so refreshing doesn't re-trigger
+                        localStorage.removeItem('active_download');
+
                         return latestCompleted;
                     });
                 }
@@ -83,11 +92,13 @@ const RunnerView = () => {
         source.onerror = () => {
             // Stream naturally ends or errors out.
         };
-    };
+    }, [addLog]);
 
-    const startEngine = async (payload) => {
+    const startEngine = useCallback(async (payload) => {
         try {
-            await fetch('http://127.0.0.1:7842/download', {
+            setIsRunning(true);
+            startTimeRef.current = Date.now();
+            await fetch(`${ENGINE_BASE}/download`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -96,19 +107,31 @@ const RunnerView = () => {
         } catch (err) {
             console.error(err);
             addLog('Failed to start engine. Please make sure setup is complete.', 'error');
+            setIsRunning(false);
         }
-    };
+    }, [connectSSE, addLog]);
 
     useEffect(() => {
-        const saved = localStorage.getItem('active_download');
+        // Try sessionStorage first (has full payload with credentials)
+        // Fall back to localStorage (safe version, no passwords — used for UI only)
+        const savedFull = sessionStorage.getItem('active_download_full');
+        const savedSafe = localStorage.getItem('active_download');
+        const saved = savedFull || savedSafe;
+
         if (saved) {
             const parsed = JSON.parse(saved);
             setConfig(parsed);
+            configRef.current = parsed;
             const initialClients = parsed.clients.map(c => ({ ...c, status: 'Waiting', progress: '0/0' }));
             setClients(initialClients);
-            setTotalFiles(parsed.clients.length * parsed.returns.length * Math.max(1, parsed.months.length));
+            const total = parsed.clients.length * parsed.returns.length * Math.max(1, parsed.months.length);
+            setTotalFiles(total);
+            totalFilesRef.current = total;
 
             startEngine(parsed);
+
+            // Clean up sessionStorage after reading (one-time use)
+            sessionStorage.removeItem('active_download_full');
         } else {
             navigate('/download');
         }
@@ -118,12 +141,52 @@ const RunnerView = () => {
                 eventSourceRef.current.close();
             }
         };
-    }, [navigate]);
+    }, [navigate, startEngine]);
 
+    // --- Control Buttons ---
+    const handlePause = async () => {
+        try {
+            await fetch(`${ENGINE_BASE}/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'pause' })
+            });
+            addLog('Pause requested...', 'info');
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleSkip = async () => {
+        try {
+            await fetch(`${ENGINE_BASE}/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'skip' })
+            });
+            addLog('Skipping current client...', 'info');
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleStop = async () => {
+        if (!window.confirm('Are you sure you want to stop the download?')) return;
+        try {
+            await fetch(`${ENGINE_BASE}/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'stop' })
+            });
+            addLog('Stop requested. Finishing current file...', 'error');
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     const submitCaptcha = async () => {
         try {
-            await fetch('http://127.0.0.1:7842/captcha', {
+            await fetch(`${ENGINE_BASE}/captcha`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ captcha: captchaInput })
@@ -146,7 +209,7 @@ const RunnerView = () => {
             addLog("Captcha not solved in time. Client skipped.", "error");
         }
         return () => clearInterval(timer);
-    }, [captchaNeeded, timeLeft]);
+    }, [captchaNeeded, timeLeft, addLog]);
 
     const progressPercent = totalFiles > 0 ? Math.min(100, Math.round((completedFiles / totalFiles) * 100)) : 0;
 
@@ -163,6 +226,12 @@ const RunnerView = () => {
                     <div className="progress-bar-bg">
                         <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }}></div>
                     </div>
+                    {isDone && (
+                        <div className="flex-center mt-4 gap-4">
+                            <button className="btn-primary" onClick={() => navigate('/history')}>View History</button>
+                            <button className="btn-secondary" onClick={() => navigate('/download')}>New Download</button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="runner-grid">
@@ -184,9 +253,9 @@ const RunnerView = () => {
                         </div>
 
                         <div className="controls-row flex-between mt-4 pt-4 border-t">
-                            <button className="btn-secondary flex-1 mx-1"><Pause size={16} /> Pause</button>
-                            <button className="btn-secondary flex-1 mx-1"><SkipForward size={16} /> Skip</button>
-                            <button className="btn-secondary flex-1 mx-1 text-error"><Square size={16} fill="currentColor" /> Stop</button>
+                            <button className="btn-secondary flex-1 mx-1" onClick={handlePause} disabled={!isRunning}><Pause size={16} /> Pause</button>
+                            <button className="btn-secondary flex-1 mx-1" onClick={handleSkip} disabled={!isRunning}><SkipForward size={16} /> Skip</button>
+                            <button className="btn-secondary flex-1 mx-1 text-error" onClick={handleStop} disabled={!isRunning}><Square size={16} fill="currentColor" /> Stop</button>
                         </div>
                     </div>
 
@@ -201,7 +270,7 @@ const RunnerView = () => {
                                         <AlertTriangle size={24} className="text-warning-icon" />
                                         <div>
                                             <h4 className="font-medium text-warning-title">Action needed — A browser tab has opened</h4>
-                                            <p className="text-sm mt-1 text-warning-text">Please type the captcha shown and click Login. The rest is automatic.</p>
+                                            <p className="text-sm mt-1 text-warning-text">{captchaMsg}</p>
                                         </div>
                                     </div>
                                     <div className="text-right text-warning-title">

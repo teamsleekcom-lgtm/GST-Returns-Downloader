@@ -27,7 +27,7 @@ const DashboardView = () => {
         }
     });
 
-    const pendingDownloads = clients.length > 0 ? Math.floor(clients.length * 0.4) : 0; // Just an estimate for the UI gauge
+    const pendingDownloads = clients.filter(c => c.lastDownloaded === 'Never').length;
     const lastRunDate = history.length > 0 ? history[0].date : 'Never';
 
     const stats = [

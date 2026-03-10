@@ -1,6 +1,7 @@
 # Node
 node_modules/
 frontend/node_modules/
+frontend/dist/
 npm-debug.log
 yarn-error.log
 
@@ -9,6 +10,11 @@ engine/venv/
 engine/__pycache__/
 *.pyc
 *.pyo
+engine/startup.log
+
+# Temp files
+*.txt
+!README.txt
 
 # System
 .DS_Store
