@@ -11,6 +11,13 @@ echo     GST Returns Downloader
 echo  ============================================================
 echo.
 
+REM --- Kill ANY process using port 7842 (old engines etc.) ---
+echo  Clearing port 7842...
+powershell -Command "Get-NetTCPConnection -LocalPort 7842 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+timeout /t 1 >nul
+echo  [OK] Port is clear.
+echo.
+
 REM --- SMART CHECK: If already set up, skip to quick launch ---
 if exist "%GST_HOME%\venv\Scripts\activate.bat" (
     if exist "%GST_HOME%\main.py" (
@@ -59,12 +66,8 @@ if errorlevel 1 (
         exit /b 1
     )
 )
-echo  Python is ready.
+echo  [OK] Python is ready.
 echo.
-
-REM --- Kill old engine quietly ---
-echo  Preparing environment...
-taskkill /f /im pythonw.exe >nul 2>&1
 
 REM --- Download code ---
 echo  Downloading latest version...
@@ -87,7 +90,7 @@ if exist "GST-Returns-Downloader-master\engine" (
 )
 rmdir /s /q "GST-Returns-Downloader-master" 2>nul
 del /q repo.zip 2>nul
-echo  Files ready.
+echo  [OK] Files ready.
 echo.
 
 REM --- Setup Python venv ---
@@ -107,7 +110,7 @@ call .\venv\Scripts\Activate.bat
 
 echo  Installing dependencies...
 pip install fastapi uvicorn selenium >nul 2>&1
-echo  Dependencies ready.
+echo  [OK] Dependencies ready.
 echo.
 goto start_server
 
@@ -131,10 +134,10 @@ if exist main_check.py (
             )
             rmdir /s /q "GST-Returns-Downloader-master" 2>nul
             del /q repo.zip 2>nul
-            echo  Updated!
+            echo  [OK] Updated to latest version!
         )
     ) else (
-        echo  Already on latest version.
+        echo  [OK] Already on latest version.
     )
     del /q main_check.py 2>nul
 )
@@ -143,9 +146,6 @@ echo.
 REM ===== START SERVER =====
 :start_server
 echo  Starting server...
-
-REM Kill anything on port 7842
-taskkill /f /im pythonw.exe >nul 2>&1
 
 REM Start uvicorn
 start "GST_Engine" /min python -m uvicorn main:app --host 127.0.0.1 --port 7842
@@ -158,7 +158,7 @@ timeout /t 2 >nul
 curl -s http://127.0.0.1:7842/status >nul 2>&1
 if not errorlevel 1 goto server_ready
 set /a retries+=1
-echo  Attempt %retries%/10...
+echo  Attempt %retries% of 10...
 if %retries% GEQ 10 (
     color 0E
     echo.
@@ -171,7 +171,7 @@ goto wait_loop
 
 :server_ready
 echo.
-echo  Server is running!
+echo  [OK] Server is running!
 
 REM Open browser
 start "" "http://127.0.0.1:7842"
