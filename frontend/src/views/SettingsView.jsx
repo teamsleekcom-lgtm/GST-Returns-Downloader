@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import MainLayout from '../components/layout/MainLayout';
-import { getClients, saveClients, importClients } from '../services/clientService';
+import { getClients, saveClients, importClients, lockVault } from '../services/clientService';
 import { clearHistory } from '../services/historyService';
 import { Save, Download, Upload, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -92,12 +92,15 @@ const SettingsView = () => {
     };
 
     const clearAllData = () => {
-        if (window.confirm("WARNING: This will delete ALL clients and history permanently. Are you absolutely sure?")) {
+        if (window.confirm("WARNING: This will delete ALL clients, history, settings, and your master password. Are you absolutely sure?")) {
             saveClients([]);
             clearHistory();
             localStorage.removeItem(SETTINGS_KEY);
             localStorage.removeItem('active_download');
-            alert("All data has been cleared.");
+            localStorage.removeItem('gst_key_salt');
+            localStorage.removeItem('gst_key_verify');
+            lockVault();
+            alert("All data has been cleared. You will need to set a new master password.");
             window.location.reload();
         }
     };

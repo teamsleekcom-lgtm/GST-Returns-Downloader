@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LockScreen from './components/LockScreen';
 import SetupView from './views/SetupView';
 import DashboardView from './views/DashboardView';
 import ClientManagerView from './views/ClientManagerView';
@@ -8,18 +9,24 @@ import RunnerView from './views/RunnerView';
 import HistoryView from './views/HistoryView';
 import SettingsView from './views/SettingsView';
 import { isEngineRunning } from './services/engineService';
+import { isVaultUnlocked } from './services/clientService';
 
 function App() {
   const [engineReady, setEngineReady] = useState(null);
+  const [unlocked, setUnlocked] = useState(isVaultUnlocked());
 
   useEffect(() => {
-    // Initial check on load
     const checkEngine = async () => {
       const running = await isEngineRunning();
       setEngineReady(running);
     };
     checkEngine();
   }, []);
+
+  // Show lock screen if vault is not unlocked
+  if (!unlocked) {
+    return <LockScreen onUnlock={() => setUnlocked(true)} />;
+  }
 
   if (engineReady === null) {
     return <div className="flex-center" style={{ height: '100vh' }}>Loading...</div>;
@@ -28,7 +35,6 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* If engine not ready, default to setup. If ready, default to dashboard. */}
         <Route
           path="/"
           element={engineReady ? <Navigate to="/dashboard" replace /> : <SetupView />}
@@ -39,7 +45,6 @@ function App() {
         <Route path="/runner" element={<RunnerView />} />
         <Route path="/history" element={<HistoryView />} />
         <Route path="/settings" element={<SettingsView />} />
-        {/* Catch-all route */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
