@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isEngineRunning } from '../services/engineService';
-import { CheckCircle2, Download, Loader2, AlertTriangle, HelpCircle } from 'lucide-react';
+import { CheckCircle2, Download, Loader2, HelpCircle, Monitor, Shield, Zap } from 'lucide-react';
 import './SetupView.css';
 
 const SetupView = () => {
@@ -32,80 +32,27 @@ const SetupView = () => {
         return () => clearInterval(interval);
     }, [step, navigate, showTroubleshooting]);
 
-    const handleDownload = () => {
-        const scriptContent = [
-            "@echo off",
-            "echo ============================================================",
-            "echo   GST Returns Downloader - Engine Setup",
-            "echo ============================================================",
-            "echo.",
-            "echo Please wait while we configure your secure local environment.",
-            "echo.",
-            "",
-            "REM Close any existing engine process",
-            "taskkill /f /im python.exe /fi \"WINDOWTITLE eq GST_Engine\" >nul 2>&1",
-            "taskkill /f /im pythonw.exe >nul 2>&1",
-            "",
-            "REM Create working directory",
-            "mkdir \"%USERPROFILE%\\GST_Engine\" 2>nul",
-            "cd /d \"%USERPROFILE%\\GST_Engine\"",
-            "",
-            "echo [1/4] Downloading core engine...",
-            "curl -sL \"https://raw.githubusercontent.com/teamsleekcom-lgtm/GST-Returns-Downloader/master/engine/main.py\" -o main.py",
-            "if not exist main.py (",
-            "    echo ERROR: Failed to download engine. Check your internet connection.",
-            "    pause",
-            "    exit /b 1",
-            ")",
-            "",
-            "echo [2/4] Setting up Python environment...",
-            "python --version >nul 2>&1",
-            "if errorlevel 1 (",
-            "    echo ERROR: Python is not installed or not on PATH.",
-            "    echo Please install Python from https://python.org and ensure",
-            "    echo 'Add Python to PATH' is checked during installation.",
-            "    pause",
-            "    exit /b 1",
-            ")",
-            "python -m venv venv 2>nul",
-            "call .\\venv\\Scripts\\Activate.bat",
-            "",
-            "echo [3/4] Installing dependencies...",
-            "pip install fastapi uvicorn selenium >nul 2>&1",
-            "",
-            "echo [4/4] Starting background engine on port 7842...",
-            "",
-            "REM Try pythonw first (silent), fall back to python if not available",
-            "where pythonw >nul 2>&1",
-            "if %errorlevel%==0 (",
-            "    start \"GST_Engine\" /min pythonw -m uvicorn main:app --host 127.0.0.1 --port 7842",
-            ") else (",
-            "    start \"GST_Engine\" /min python -m uvicorn main:app --host 127.0.0.1 --port 7842",
-            ")",
-            "",
-            "echo.",
-            "echo ============================================================",
-            "echo   Setup complete! You can close this window.",
-            "echo   Go back to your browser - the app will detect the engine.",
-            "echo ============================================================",
-            "timeout /t 5 >nul",
-            "exit"
-        ].join("\r\n");
-
-        const element = document.createElement("a");
-        const file = new Blob([scriptContent], { type: 'text/plain' });
-        element.href = URL.createObjectURL(file);
-        element.download = "GST_Setup.bat";
-        document.body.appendChild(element);
-        element.click();
-        document.body.removeChild(element);
-    };
-
     return (
         <div className="setup-container flex-center">
             <div className="card setup-card">
-                <h2 className="setup-title">Welcome to GST Returns Downloader</h2>
-                <p className="setup-subtitle">Let's get things ready for you.</p>
+                <h2 className="setup-title">GSTR Downloader</h2>
+                <p className="setup-subtitle">Bulk download GST returns for all your clients in one click.</p>
+
+                {/* Feature highlights */}
+                <div className="features-row" style={{ display: 'flex', gap: '1.5rem', margin: '1.5rem 0', justifyContent: 'center' }}>
+                    <div className="feature-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        <Shield size={16} style={{ color: 'var(--primary)' }} />
+                        <span>100% Local &amp; Private</span>
+                    </div>
+                    <div className="feature-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        <Zap size={16} style={{ color: 'var(--primary)' }} />
+                        <span>One-Click Setup</span>
+                    </div>
+                    <div className="feature-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        <Monitor size={16} style={{ color: 'var(--primary)' }} />
+                        <span>Works Offline</span>
+                    </div>
+                </div>
 
                 <div className="steps-container">
                     {/* Step 1 */}
@@ -114,19 +61,32 @@ const SetupView = () => {
                             {step > 1 ? <CheckCircle2 className="text-success" /> : <div className="step-number">1</div>}
                         </div>
                         <div className="step-content">
-                            <h3>One Required Download</h3>
+                            <h3>Download &amp; Run</h3>
                             {step === 1 ? (
                                 <>
-                                    <button className="btn-primary mt-4" onClick={handleDownload}>
-                                        <Download size={18} /> Download Setup File
-                                    </button>
-                                    <p className="instruction-text mt-3">
-                                        Run the file after downloading. A command window will open, install
-                                        dependencies, and start the local engine. Come back here when it's done.
-                                    </p>
+                                    <a
+                                        href="/GST_Downloader.bat"
+                                        download="GST_Downloader.bat"
+                                        className="btn-primary mt-4"
+                                        style={{ display: 'inline-flex', textDecoration: 'none' }}
+                                    >
+                                        <Download size={18} /> Download GST Downloader
+                                    </a>
+                                    <div className="instruction-text mt-3" style={{ lineHeight: '1.8' }}>
+                                        <strong>How it works:</strong>
+                                        <ol style={{ paddingLeft: '1.25rem', marginTop: '0.5rem' }}>
+                                            <li>Download the file above</li>
+                                            <li>Double-click <code>GST_Downloader.bat</code> to run it</li>
+                                            <li>It will set up everything and open the app in your browser</li>
+                                        </ol>
+                                        <p className="text-sm text-muted mt-2">
+                                            <strong>Requires:</strong> Python 3.8+ installed with "Add to PATH" checked. <a href="https://python.org" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>Get Python →</a>
+                                        </p>
+                                    </div>
+
                                     <div className="waiting-message flex-center mt-4">
                                         <Loader2 className="spinner" size={16} />
-                                        <span>Waiting for setup to complete&hellip;</span>
+                                        <span>Waiting for engine to start&hellip;</span>
                                     </div>
 
                                     {showTroubleshooting && (
@@ -141,11 +101,11 @@ const SetupView = () => {
                                                 <span className="font-medium">Taking too long?</span>
                                             </h4>
                                             <ul style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.8', paddingLeft: '1.25rem' }}>
-                                                <li><strong>Python not installed?</strong> Download from <a href="https://python.org" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>python.org</a> and check "Add Python to PATH".</li>
-                                                <li><strong>Firewall blocking?</strong> Allow Python through your firewall when prompted, or add port 7842 as an exception.</li>
-                                                <li><strong>Antivirus interference?</strong> Some antivirus software blocks local servers. Add an exception for <code>%USERPROFILE%\GST_Engine</code>.</li>
-                                                <li><strong>Corporate network?</strong> VPN, proxy, or group policies may block localhost connections. Try disconnecting VPN temporarily.</li>
-                                                <li><strong>Try re-running</strong> the downloaded <code>GST_Setup.bat</code> file as Administrator.</li>
+                                                <li><strong>Python not installed?</strong> Download from <a href="https://python.org" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>python.org</a> — check "Add Python to PATH".</li>
+                                                <li><strong>Firewall blocking?</strong> Allow Python through your firewall, or add port 7842 as an exception.</li>
+                                                <li><strong>Antivirus interference?</strong> Add an exception for <code>%USERPROFILE%\GST_Engine</code>.</li>
+                                                <li><strong>Corporate network?</strong> Try disconnecting VPN temporarily.</li>
+                                                <li><strong>Try running</strong> <code>GST_Downloader.bat</code> as Administrator (right-click → Run as administrator).</li>
                                             </ul>
                                         </div>
                                     )}
@@ -162,11 +122,11 @@ const SetupView = () => {
                             <div className="step-number">2</div>
                         </div>
                         <div className="step-content">
-                            <h3>Getting Ready</h3>
+                            <h3>Launching Dashboard</h3>
                             {step === 2 && (
                                 <div className="progress-container mt-3">
                                     <div className="progress-bar-animated"></div>
-                                    <p className="progress-text mt-2">Almost there — finishing setup&hellip;</p>
+                                    <p className="progress-text mt-2">Almost there — redirecting you now&hellip;</p>
                                 </div>
                             )}
                         </div>
