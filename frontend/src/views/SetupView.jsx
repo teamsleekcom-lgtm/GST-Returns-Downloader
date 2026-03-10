@@ -45,7 +45,7 @@ const SetupView = () => {
             "echo Installing dependencies...",
             "pip install fastapi uvicorn selenium >nul 2>&1",
             "echo Starting background engine...",
-            "start \"\" pythonw -m uvicorn main:app --host 127.0.0.1 --port 7842",
+            "start \"\" pythonw -m uvicorn main:app --host localhost --port 7842",
             "echo Done! You may close this window or it will close automatically.",
             "timeout /t 3 >nul",
             "exit"
