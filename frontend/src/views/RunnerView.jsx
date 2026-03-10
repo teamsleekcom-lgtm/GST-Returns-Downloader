@@ -24,38 +24,8 @@ const RunnerView = () => {
 
     const eventSourceRef = useRef(null);
 
-    useEffect(() => {
-        const saved = localStorage.getItem('active_download');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            setConfig(parsed);
-            const initialClients = parsed.clients.map(c => ({ ...c, status: 'Waiting', progress: '0/0' }));
-            setClients(initialClients);
-            setTotalFiles(parsed.clients.length * parsed.returns.length * Math.max(1, parsed.months.length));
-
-            startEngine(parsed);
-        } else {
-            navigate('/download');
-        }
-
-        return () => {
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-            }
-        };
-    }, [navigate]);
-
-    const startEngine = async (payload) => {
-        try {
-            await fetch('http://localhost:7842/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            connectSSE();
-        } catch (e) {
-            addLog('Failed to start engine. Please make sure setup is complete.', 'error');
-        }
+    const addLog = (msg, type = 'info') => {
+        setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }]);
     };
 
     const connectSSE = () => {
@@ -82,7 +52,7 @@ const RunnerView = () => {
 
                         // Calculate final stats
                         const failedCount = updatedClients.filter(c => c.status === 'Failed').length;
-                        const finalStatus = failedCount === 0 ? 'Completed' : (failedCount === updatedClients.length ? 'Failed' : 'Partial');
+                        const _finalStatus = failedCount === 0 ? 'Completed' : (failedCount === updatedClients.length ? 'Failed' : 'Partial');
 
                         // Extract completedFiles directly from the current state variable by using the setter callback trick to get latest,
                         // or just rely on the fact that if we use a ref it's easier. For now, since it updates sequentially, 
@@ -96,7 +66,7 @@ const RunnerView = () => {
                     // To ensure we get the latest value without complex refs, let's use a function inside setCompletedFiles
                     setCompletedFiles(latestCompleted => {
                         addHistoryRecord({
-                            clients: payload.clients.length,
+                            clients: config ? config.clients.length : 0,
                             files: latestCompleted,
                             duration: '0m', // Calculate real duration if needed in future
                             status: latestCompleted === 0 ? 'Failed' : (latestCompleted < totalFiles ? 'Partial' : 'Completed')
@@ -105,6 +75,7 @@ const RunnerView = () => {
                     });
                 }
             } catch (err) {
+                console.error(err);
                 addLog(e.data, 'info');
             }
         };
@@ -114,9 +85,41 @@ const RunnerView = () => {
         };
     };
 
-    const addLog = (msg, type = 'info') => {
-        setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }]);
+    const startEngine = async (payload) => {
+        try {
+            await fetch('http://localhost:7842/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            connectSSE();
+        } catch (err) {
+            console.error(err);
+            addLog('Failed to start engine. Please make sure setup is complete.', 'error');
+        }
     };
+
+    useEffect(() => {
+        const saved = localStorage.getItem('active_download');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            setConfig(parsed);
+            const initialClients = parsed.clients.map(c => ({ ...c, status: 'Waiting', progress: '0/0' }));
+            setClients(initialClients);
+            setTotalFiles(parsed.clients.length * parsed.returns.length * Math.max(1, parsed.months.length));
+
+            startEngine(parsed);
+        } else {
+            navigate('/download');
+        }
+
+        return () => {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+            }
+        };
+    }, [navigate]);
+
 
     const submitCaptcha = async () => {
         try {
@@ -128,7 +131,8 @@ const RunnerView = () => {
             setCaptchaNeeded(false);
             setCaptchaInput('');
             addLog('Captcha submitted. Resuming...', 'success');
-        } catch (e) {
+        } catch (err) {
+            console.error(err);
             addLog('Failed to submit captcha.', 'error');
         }
     };
