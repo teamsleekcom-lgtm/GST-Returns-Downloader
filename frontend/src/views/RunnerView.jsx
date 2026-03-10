@@ -8,7 +8,6 @@ import './RunnerView.css';
 
 const RunnerView = () => {
     const navigate = useNavigate();
-    const [config, setConfig] = useState(null);
 
     // Progress State
     const [completedFiles, setCompletedFiles] = useState(0);
@@ -120,7 +119,6 @@ const RunnerView = () => {
 
         if (saved) {
             const parsed = JSON.parse(saved);
-            setConfig(parsed);
             configRef.current = parsed;
             const initialClients = parsed.clients.map(c => ({ ...c, status: 'Waiting', progress: '0/0' }));
             setClients(initialClients);

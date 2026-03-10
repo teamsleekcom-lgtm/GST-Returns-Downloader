@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MainLayout from '../components/layout/MainLayout';
-import { Download, Search, LayoutDashboard } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { getHistory } from '../services/historyService';
 import * as XLSX from 'xlsx';
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import { getClients, saveClients, importClients } from '../services/clientService';
 import { clearHistory } from '../services/historyService';

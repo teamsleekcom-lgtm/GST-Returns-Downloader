@@ -154,6 +154,7 @@ const DownloadView = () => {
                     <div className="form-group mb-6">
                         <label>Financial Year</label>
                         <select className="input-field" value={fy} onChange={e => setFy(e.target.value)}>
+                            <option value="2025-26">2025-26</option>
                             <option value="2024-25">2024-25</option>
                             <option value="2023-24">2023-24</option>
                             <option value="2022-23">2022-23</option>
@@ -217,11 +218,8 @@ const DownloadView = () => {
                     <div className="form-group mt-auto pt-4 border-t">
                         <label>Save Location</label>
                         <div className="flex-between mt-2">
-                            <div className="path-display flex-center gap-2">
-                                <Folder size={16} className="text-muted" />
-                                <span className="text-sm truncate">C:\GST_Downloads</span>
-                            </div>
-                            <button className="btn-secondary text-sm" style={{ padding: '0.25rem 0.5rem' }}>Change</button>
+                            <Folder size={16} className="text-muted" />
+                            <span className="text-sm truncate">C:\GST_Downloads</span>
                         </div>
 
                         <label className="checkbox-label mt-4">
