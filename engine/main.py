@@ -1,12 +1,16 @@
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, Response, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException, NoSuchElementException
 
 app = FastAPI()
 
@@ -55,6 +59,36 @@ def init_driver(download_dir):
     
     driver = webdriver.Chrome(options=options)
     return driver
+
+def smart_click(driver, by, value, timeout=15):
+    """Wait for element to be clickably present, with retry on stale reference."""
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        try:
+            el = WebDriverWait(driver, 2).until(EC.element_to_be_clickable((by, value)))
+            el.click()
+            return True
+        except StaleElementReferenceException:
+            continue
+        except TimeoutException:
+            pass # Keep trying until outer loop expires
+    return False
+
+def dismiss_gst_modals(driver):
+    """Check for and dismiss common GST portal popups after login."""
+    try:
+        # Common text on dismiss buttons: Remind me later, Close, Later
+        xpath = "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'remind me later') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'close') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'later')]"
+        btns = driver.find_elements(By.XPATH, xpath)
+        for btn in btns:
+            if btn.is_displayed():
+                try:
+                    btn.click()
+                    time.sleep(1)
+                except:
+                    pass
+    except Exception:
+        pass
 
 async def send_log(msg, log_type='info'):
     await state.queue.put({"type": "log", "message": msg, "log_type": log_type})
@@ -122,8 +156,32 @@ async def process_downloads(payload):
                 state.driver.find_element(By.ID, "captcha").send_keys(captcha_val)
                 state.driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]").click()
                 
-                await asyncio.sleep(5)
-                await send_log(f"Login attempted for {firm_name}", "info")
+                await send_log(f"Login submitted for {firm_name}. Waiting for dashboard...", "info")
+                
+                # Smart wait for dashboard to load & handle popups
+                dashboard_loaded = False
+                for _ in range(15):
+                    if state.stop_requested:
+                        break
+                    
+                    # Dismiss intersitials if they appear
+                    dismiss_gst_modals(state.driver)
+                    
+                    try:
+                        # Look for common dashboard indicator
+                        elements = state.driver.find_elements(By.XPATH, "//a[contains(text(), 'Return Dashboard')] | //a[contains(text(), 'Logout')] | //button[contains(text(), 'Return Dashboard')]")
+                        if any(e.is_displayed() for e in elements):
+                            dashboard_loaded = True
+                            break
+                    except StaleElementReferenceException:
+                        pass
+                        
+                    await asyncio.sleep(1)
+                    
+                if not dashboard_loaded and not state.stop_requested:
+                    await send_log(f"Dashboard did not load in expected time for {firm_name}. Proceeding...", "warning")
+                else:
+                    await send_log(f"Login successful for {firm_name}", "success")
                 
                 for ret in returns:
                     if state.skip_requested or state.stop_requested:
