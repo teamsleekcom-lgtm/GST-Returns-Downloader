@@ -179,7 +179,7 @@ start "" "http://127.0.0.1:7842"
 color 0A
 echo.
 echo  ============================================================
-echo     GST Returns Downloader is running!
+echo     GST Returns Downloader is running in the background!
 echo  ============================================================
 echo.
 echo  App is open at: http://127.0.0.1:7842
@@ -188,8 +188,8 @@ echo  YOUR DATA IS SAFE:
 echo  - Closing the browser does NOT delete your data
 echo  - Data persists until you clear it in Settings
 echo.
-echo  KEEP THIS WINDOW OPEN while using the app.
-echo  Close this window to stop the engine.
+echo  This terminal will now close automatically.
+echo  The engine will continue running silently.
 echo  ============================================================
 echo.
-pause
+timeout /t 3 >nul

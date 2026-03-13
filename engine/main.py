@@ -47,7 +47,12 @@ state = EngineState()
 
 def init_driver(download_dir):
     options = webdriver.ChromeOptions()
-    options.add_argument("--window-size=1200,800")
+    options.add_argument("--headless=new")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-extensions")
     
     prefs = {
         "download.default_directory": download_dir,
@@ -59,6 +64,8 @@ def init_driver(download_dir):
     options.add_experimental_option("prefs", prefs)
     
     driver = webdriver.Chrome(options=options)
+    # Give the page a generous load timeout to prevent early stacktraces on slow networks
+    driver.set_page_load_timeout(45)
     return driver
 
 def smart_click(driver, by, value, timeout=15):
@@ -300,24 +307,57 @@ async def process_downloads(payload):
                                 
                             target_card = return_cards[0]
                             
-                            # Depending on format, click the appropriate download button within this card
-                            downloaded = False
+                            # If 'All' formats or 'PDF', fetch the PDF summary FIRST
+                            # Doing this first allows us to return to the dashboard and trigger Excel/JSON next.
+                            if download_format in ['All', 'PDF']:
+                                try:
+                                    view_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare online') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'view')]")
+                                    view_btn.click()
+                                    await asyncio.sleep(5) # wait for summary page to render completely
+                                    
+                                    # Print to PDF via CDP
+                                    pdf_data = state.driver.execute_cdp_cmd("Page.printToPDF", {
+                                        "landscape": False, "displayHeaderFooter": False, "printBackground": True, "preferCSSPageSize": True
+                                    })
+                                    import base64
+                                    pdf_bytes = base64.b64decode(pdf_data['data'])
+                                    with open(os.path.join(client_dir, f"{ret}_{month}_{fy}.pdf"), "wb") as f:
+                                        f.write(pdf_bytes)
+                                    await send_log(f"Generated PDF summary for {ret}", "success")
+                                    
+                                    # If 'All', we need to go back to Dashboard for the next format step
+                                    if download_format == 'All':
+                                        state.driver.get("https://services.gst.gov.in/services/returnsdashboard")
+                                        await asyncio.sleep(3)
+                                        # Re-select period
+                                        WebDriverWait(state.driver, 10).until(EC.presence_of_element_located((By.ID, "finYear")))
+                                        for opt in state.driver.find_element(By.ID, "finYear").find_elements(By.TAG_NAME, "option"):
+                                            if fy in opt.text: opt.click(); break
+                                        await asyncio.sleep(1)
+                                        for opt in state.driver.find_element(By.ID, period_select_id).find_elements(By.TAG_NAME, "option"):
+                                            opt_text = state.driver.execute_script("return arguments[0].textContent;", opt) or opt.text
+                                            if month_long.lower() in opt_text.lower() or month.lower() in opt_text.lower(): opt.click(); break
+                                        smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=10)
+                                        await asyncio.sleep(4)
+                                        # Re-find card
+                                        return_cards = state.driver.find_elements(By.XPATH, f"//div[contains(@class, 'col-sm-') and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'gstr-{ret.lower()}')]")
+                                        if return_cards: target_card = return_cards[0]
+                                except Exception as e:
+                                    await send_log(f"Could not generate PDF for {ret}: {str(e)}", "warning")
                             
+                            # Excel & JSON
                             if download_format in ['All', 'Excel', 'JSON']:
-                                # Try to click Prepare Offline or Download if available
                                 try:
                                     offline_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare offline') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]")
                                     offline_btn.click()
                                     await asyncio.sleep(3)
                                     
-                                    # On the next page, click Generate/Download links based on format
                                     if download_format in ['All', 'JSON']:
                                         try:
                                             json_btn = WebDriverWait(state.driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate json') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download json')]")))
                                             json_btn.click()
                                             await send_log(f"Triggered JSON download for {ret}", "success")
                                             await asyncio.sleep(2)
-                                            downloaded = True
                                         except: pass
                                         
                                     if download_format in ['All', 'Excel']:
@@ -326,60 +366,9 @@ async def process_downloads(payload):
                                             excel_btn.click()
                                             await send_log(f"Triggered Excel download for {ret}", "success")
                                             await asyncio.sleep(2)
-                                            downloaded = True
                                         except: pass
-                                        
                                 except Exception as e:
                                     await send_log(f"Could not find offline/download options for {ret}: {str(e)}", "warning")
-                                    
-                            if download_format in ['All', 'PDF'] and not downloaded:
-                                # PDF Generation via Chrome CDP PrintToPDF
-                                try:
-                                    # Click "Prepare Online" or "View" to open the return summary page
-                                    view_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare online') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'view')]")
-                                    view_btn.click()
-                                    await asyncio.sleep(5) # wait for summary page to render completely
-                                    
-                                    # Print to PDF using Chrome DevTools Protocol
-                                    pdf_data = state.driver.execute_cdp_cmd("Page.printToPDF", {
-                                        "landscape": False,
-                                        "displayHeaderFooter": False,
-                                        "printBackground": True,
-                                        "preferCSSPageSize": True
-                                    })
-                                    
-                                    import base64
-                                    pdf_bytes = base64.b64decode(pdf_data['data'])
-                                    pdf_filename = os.path.join(client_dir, f"{ret}_{month}_{fy}.pdf")
-                                    with open(pdf_filename, "wb") as f:
-                                        f.write(pdf_bytes)
-                                        
-                                    await send_log(f"Generated PDF summary for {ret}", "success")
-                                    downloaded = True
-                                    
-                                    # Go back to dashboard to continue loop smoothly
-                                    state.driver.get("https://services.gst.gov.in/services/returnsdashboard")
-                                    await asyncio.sleep(3)
-                                    
-                                    # We have to re-select the period because page reloaded
-                                    try:
-                                        WebDriverWait(state.driver, 10).until(EC.presence_of_element_located((By.ID, "finYear")))
-                                        fy_sel = state.driver.find_element(By.ID, "finYear")
-                                        for opt in fy_sel.find_elements(By.TAG_NAME, "option"):
-                                            if fy in opt.text: opt.click(); break
-                                        await asyncio.sleep(1)
-                                        per_sel = state.driver.find_element(By.ID, "taxPeriod")
-                                        for opt in per_sel.find_elements(By.TAG_NAME, "option"):
-                                            if month_long.lower() in opt.text.lower() or month.lower() in opt.text.lower(): opt.click(); break
-                                        smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=5)
-                                        await asyncio.sleep(3)
-                                    except: pass
-                                    
-                                except Exception as e:
-                                    await send_log(f"Could not generate PDF for {ret}: {str(e)}", "warning")
-                                
-                            if not downloaded:
-                                await send_log(f"No direct download links found for {ret} {download_format}. (This is normal if portal is updating)", "info")
                                 
                         except Exception as e:
                             await send_log(f"Navigation error for {ret} - {month}: {str(e)}", "error")
