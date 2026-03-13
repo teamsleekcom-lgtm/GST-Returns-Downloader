@@ -62,7 +62,8 @@ def init_driver(download_dir):
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "plugins.always_open_pdf_externally": True,
-        "safebrowsing.enabled": True,
+        "safebrowsing.enabled": False,
+        "safebrowsing.disable_download_protection": True,
         "profile.default_content_settings.popups": 0
     }
     options.add_experimental_option("prefs", prefs)
@@ -153,12 +154,20 @@ async def process_downloads(payload):
             username = client.get('username')
             password = client.get('password')
             
-            # Setup dynamic download directory if auto_organise is checked
-            client_dir = os.path.join(save_location, firm_name, fy) if auto_organise else save_location
-            if auto_organise and not os.path.exists(client_dir):
-                os.makedirs(client_dir)
+            # Force save location to the User's OS Downloads folder to bypass Chromium UNC path rejection
+            # We nest it inside a 'GST_Downloads' master folder
+            os_downloads = os.path.join(os.path.expanduser('~'), 'Downloads', 'GST_Downloads')
             
-            # Update Chrome pref on the fly for the active session
+            # Setup dynamic download directory if auto_organise is checked
+            client_dir = os.path.join(os_downloads, firm_name, fy) if auto_organise else os_downloads
+            
+            # Ensure the directory exists
+            try:
+                os.makedirs(client_dir, exist_ok=True)
+            except Exception as e:
+                await send_log(f"Warning: Could not create directory {client_dir}: {str(e)}", "warning")
+            
+            # Update Chrome pref on the fly for the active session target
             state.driver.execute_cdp_cmd("Page.setDownloadBehavior", {
                 "behavior": "allow",
                 "downloadPath": client_dir
