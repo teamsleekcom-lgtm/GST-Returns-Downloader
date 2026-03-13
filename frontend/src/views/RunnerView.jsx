@@ -21,6 +21,7 @@ const RunnerView = () => {
     // Captcha
     const [captchaNeeded, setCaptchaNeeded] = useState(false);
     const [captchaMsg, setCaptchaMsg] = useState('');
+    const [captchaBase64, setCaptchaBase64] = useState('');
     const [captchaInput, setCaptchaInput] = useState('');
     const [timeLeft, setTimeLeft] = useState(120);
 
@@ -50,6 +51,7 @@ const RunnerView = () => {
                 } else if (data.type === 'captcha') {
                     setCaptchaNeeded(true);
                     setCaptchaMsg(data.message || 'Captcha required for login. See browser window.');
+                    if (data.image) setCaptchaBase64(data.image);
                     setTimeLeft(120);
                 } else if (data.type === 'done') {
                     addLog('Download run complete.', 'success');
@@ -191,6 +193,7 @@ const RunnerView = () => {
             });
             setCaptchaNeeded(false);
             setCaptchaInput('');
+            setCaptchaBase64('');
             addLog('Captcha submitted. Resuming...', 'success');
         } catch (err) {
             console.error(err);
@@ -277,12 +280,18 @@ const RunnerView = () => {
                                     </div>
                                 </div>
                                 <div className="flex-center mt-5 gap-4">
+                                    {captchaBase64 && (
+                                        <div className="bg-white p-2 rounded shadow-sm flex-shrink-0">
+                                            <img src={`data:image/png;base64,${captchaBase64}`} alt="Captcha" style={{ height: '50px' }} />
+                                        </div>
+                                    )}
                                     <input
                                         type="text"
                                         className="input-field max-w-sm uppercase-input"
                                         placeholder="Type captcha here..."
                                         value={captchaInput}
                                         onChange={e => setCaptchaInput(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && submitCaptcha()}
                                     />
                                     <button className="btn-primary" onClick={submitCaptcha}>Submit Login</button>
                                 </div>

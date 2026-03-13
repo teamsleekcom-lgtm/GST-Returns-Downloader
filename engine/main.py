@@ -102,10 +102,10 @@ async def send_progress(client_name, completed, total):
         "total": total
     })
 
-async def request_captcha():
+async def request_captcha(base64_img=""):
     state.captcha_solved.clear()
     state.current_captcha = ""
-    await state.queue.put({"type": "captcha", "message": "Captcha required for login. See browser window."})
+    await state.queue.put({"type": "captcha", "message": "Please enter the characters shown below.", "image": base64_img})
     
     # Wait until the frontend posts the captcha
     await state.captcha_solved.wait()
@@ -164,8 +164,16 @@ async def process_downloads(payload):
                 state.driver.find_element(By.ID, "username").send_keys(username)
                 state.driver.find_element(By.ID, "user_pass").send_keys(password)
                 
+                # Get Captcha Image B64
+                captcha_b64 = ""
+                try:
+                    cap_img = WebDriverWait(state.driver, 5).until(EC.presence_of_element_located((By.XPATH, "//img[contains(@src, 'captcha') or contains(@id, 'captcha') or contains(@id, 'imgCaptcha')]")))
+                    captcha_b64 = cap_img.screenshot_as_base64
+                except Exception as e:
+                    await send_log("Could not extract Captcha image visually, check browser.", "warning")
+                
                 # Request Captcha from user via UI
-                captcha_val = await request_captcha()
+                captcha_val = await request_captcha(captcha_b64)
                 state.driver.find_element(By.ID, "captcha").send_keys(captcha_val)
                 state.driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]").click()
                 
@@ -288,8 +296,50 @@ async def process_downloads(payload):
                                     await send_log(f"Could not find offline/download options for {ret}: {str(e)}", "warning")
                                     
                             if download_format in ['All', 'PDF'] and not downloaded:
-                                # Standard view/download PDF usually requires clicking 'Prepare Online' or 'View' first
-                                pass # Implement specific PDF scraping if 'All' or 'PDF' is strictly required and no direct button exists
+                                # PDF Generation via Chrome CDP PrintToPDF
+                                try:
+                                    # Click "Prepare Online" or "View" to open the return summary page
+                                    view_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare online') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'view')]")
+                                    view_btn.click()
+                                    await asyncio.sleep(5) # wait for summary page to render completely
+                                    
+                                    # Print to PDF using Chrome DevTools Protocol
+                                    pdf_data = state.driver.execute_cdp_cmd("Page.printToPDF", {
+                                        "landscape": False,
+                                        "displayHeaderFooter": False,
+                                        "printBackground": True,
+                                        "preferCSSPageSize": True
+                                    })
+                                    
+                                    import base64
+                                    pdf_bytes = base64.b64decode(pdf_data['data'])
+                                    pdf_filename = os.path.join(client_dir, f"{ret}_{month}_{fy}.pdf")
+                                    with open(pdf_filename, "wb") as f:
+                                        f.write(pdf_bytes)
+                                        
+                                    await send_log(f"Generated PDF summary for {ret}", "success")
+                                    downloaded = True
+                                    
+                                    # Go back to dashboard to continue loop smoothly
+                                    state.driver.get("https://services.gst.gov.in/services/returnsdashboard")
+                                    await asyncio.sleep(3)
+                                    
+                                    # We have to re-select the period because page reloaded
+                                    try:
+                                        WebDriverWait(state.driver, 10).until(EC.presence_of_element_located((By.ID, "finYear")))
+                                        fy_sel = state.driver.find_element(By.ID, "finYear")
+                                        for opt in fy_sel.find_elements(By.TAG_NAME, "option"):
+                                            if fy in opt.text: opt.click(); break
+                                        await asyncio.sleep(1)
+                                        per_sel = state.driver.find_element(By.ID, "taxPeriod")
+                                        for opt in per_sel.find_elements(By.TAG_NAME, "option"):
+                                            if month_long.lower() in opt.text.lower() or month.lower() in opt.text.lower(): opt.click(); break
+                                        smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=5)
+                                        await asyncio.sleep(3)
+                                    except: pass
+                                    
+                                except Exception as e:
+                                    await send_log(f"Could not generate PDF for {ret}: {str(e)}", "warning")
                                 
                             if not downloaded:
                                 await send_log(f"No direct download links found for {ret} {download_format}. (This is normal if portal is updating)", "info")
