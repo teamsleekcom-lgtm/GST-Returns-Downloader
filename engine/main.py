@@ -224,7 +224,7 @@ async def process_downloads(payload):
                 
                 # Smart wait for dashboard to load & handle popups
                 dashboard_loaded = False
-                for _ in range(15):
+                for _ in range(30): # Increased from 15 to 30 (seconds) for slow logins
                     if state.stop_requested:
                         break
                     
@@ -265,8 +265,8 @@ async def process_downloads(payload):
                         state.driver.get("https://services.gst.gov.in/services/returnsdashboard")
                         
                         try:
-                            # Wait for FY dropdown to be present
-                            WebDriverWait(state.driver, 15).until(EC.presence_of_element_located((By.ID, "finYear")))
+                            # Wait for FY dropdown to be present (increased to 30s)
+                            WebDriverWait(state.driver, 30).until(EC.presence_of_element_located((By.ID, "finYear")))
                             
                             # Select Financial Year
                             fy_select = state.driver.find_element(By.ID, "finYear")
@@ -279,12 +279,12 @@ async def process_downloads(payload):
                                 except StaleElementReferenceException:
                                     pass # Ignore stale options during iteration
                                     
-                            await asyncio.sleep(2) # Wait for page/period dropdown to update via Ajax
+                            await asyncio.sleep(3) # Wait for page/period dropdown to update via Ajax (slightly increased)
                             
                             # Select Month/Quarter
                             # Need to handle exact matching carefully because portal might refresh the dropdown
                             period_select_id = "taxPeriod"
-                            WebDriverWait(state.driver, 10).until(EC.presence_of_element_located((By.ID, period_select_id)))
+                            WebDriverWait(state.driver, 30).until(EC.presence_of_element_located((By.ID, period_select_id)))
                             
                             month_long = {"Apr": "April", "May": "May", "Jun": "June", "Jul": "July", "Aug": "August", "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December", "Jan": "January", "Feb": "February", "Mar": "March"}.get(month, month)
                             
@@ -311,12 +311,18 @@ async def process_downloads(payload):
                                 
                             await asyncio.sleep(1)
                             # Click Search
-                            smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=10)
-                            await asyncio.sleep(4) # Wait for results table
+                            smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=20)
                             
-                            # Look for the specific Return box (e.g., GSTR-1, GSTR-3B)
-                            # The portal has "cards" for each return type. We look for the one containing the return name.
-                            return_cards = state.driver.find_elements(By.XPATH, f"//div[contains(@class, 'col-sm-') and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'gstr-{ret.lower()}')]")
+                            # Look for the specific Return box (e.g., GSTR-1, GSTR-3B) dynamically instead of blind sleeping
+                            card_xpath = f"//div[contains(@class, 'col-sm-') and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'gstr-{ret.lower()}')]"
+                            
+                            return_cards = []
+                            try:
+                                # Wait up to 20 seconds for the cards to actually render on the dashboard
+                                WebDriverWait(state.driver, 20).until(EC.presence_of_element_located((By.XPATH, card_xpath)))
+                                return_cards = state.driver.find_elements(By.XPATH, card_xpath)
+                            except TimeoutException:
+                                pass
                             
                             if not return_cards:
                                 await send_log(f"Return {ret} not found on dashboard for {month} {fy}. Skipping.", "warning")
@@ -326,13 +332,21 @@ async def process_downloads(payload):
                             
                             # --- EXCEL DOWNLOAD ONLY ---
                             try:
-                                # Look for "Prepare Offline" or "Download" 
-                                offline_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare offline') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]")
-                                offline_btn.click()
-                                await asyncio.sleep(4)
+                                # Look for "Prepare Offline" or "Download" using smart_click to ensure it's interactable
+                                btn_xpath = ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare offline') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]"
+                                smart_click(target_card, By.XPATH, btn_xpath, timeout=15)
                                 
-                                # Once on the offline page, look for existing download links OR click generate
+                                # Wait dynamically for the offline page to load (look for generation/download links)
                                 dl_link_xpath = "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'click here to download') and contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'excel') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'click here to download - file')]"
+                                gen_btn_xpath = "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel')]"
+                                
+                                try:
+                                    # Wait up to 15 seconds for EITHER the download link OR the generate button to appear
+                                    WebDriverWait(state.driver, 15).until(
+                                        EC.presence_of_element_located((By.XPATH, f"{dl_link_xpath} | {gen_btn_xpath}"))
+                                    )
+                                except:
+                                    pass # Might still be loading, logic below will handle it
                                 
                                 download_link = None
                                 try:
@@ -343,7 +357,7 @@ async def process_downloads(payload):
                                 if not download_link:
                                     # Click generate excel if no direct download link is there yet
                                     try:
-                                        excel_btn = WebDriverWait(state.driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel')]")))
+                                        excel_btn = WebDriverWait(state.driver, 10).until(EC.element_to_be_clickable((By.XPATH, gen_btn_xpath)))
                                         excel_btn.click()
                                         await send_log(f"Requested Excel generation for {ret}. Waiting for file...", "info")
                                     except:
@@ -366,16 +380,17 @@ async def process_downloads(payload):
                                         await asyncio.sleep(3)
                                 
                                 if download_link:
-                                    download_link.click()
+                                    # Use JS click to avoid 'element not interactable' errors if it's slightly hidden
+                                    state.driver.execute_script("arguments[0].click();", download_link)
                                     await send_log(f"Triggered Excel file download for {ret}", "success")
-                                    await asyncio.sleep(8)  # Wait for file to physically download to disk
+                                    await asyncio.sleep(12)  # Wait for file to physically download to disk (Increased for larger zipped returns)
                                 else:
                                     # Try a fallback blind click on 'Download Excel' if it's one of those immediate buttons
                                     try:
                                         fallback_btn = state.driver.find_element(By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')]")
-                                        fallback_btn.click()
+                                        state.driver.execute_script("arguments[0].click();", fallback_btn)
                                         await send_log(f"Triggered direct Excel download for {ret}", "success")
-                                        await asyncio.sleep(8)
+                                        await asyncio.sleep(12)
                                     except:
                                         await send_log(f"Excel generation for {ret} is taking too long or file not found. Skipping.", "warning")
                                     
