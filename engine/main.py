@@ -53,7 +53,8 @@ def init_driver(download_dir):
         "download.default_directory": download_dir,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "plugins.always_open_pdf_externally": True
+        "plugins.always_open_pdf_externally": True,
+        "safebrowsing.enabled": True
     }
     options.add_experimental_option("prefs", prefs)
     
@@ -116,17 +117,18 @@ async def process_downloads(payload):
     months = payload.get('months', [])
     fy = payload.get('fy', '2024-25')
     auto_organise = payload.get('autoOrganise', True)
+    save_location = payload.get('saveLocation', os.path.join(os.path.expanduser("~"), "Downloads", "GST_Downloads"))
+    download_format = payload.get('format', 'All')
     
     # Calculate totals
     total_files = len(clients) * len(returns) * max(1, len(months))
     completed = 0
 
-    base_dir = os.path.join(os.path.expanduser("~"), "Downloads", "GST_Downloads")
-    if not os.path.exists(base_dir):
-        os.makedirs(base_dir)
+    if not os.path.exists(save_location):
+        os.makedirs(save_location)
 
-    await send_log("Starting Selenium Engine...", "info")
-    state.driver = init_driver(base_dir)
+    await send_log(f"Starting Engine. Target Format: {download_format}", "info")
+    state.driver = init_driver(save_location)
     
     try:
         for client in clients:
@@ -140,7 +142,18 @@ async def process_downloads(payload):
             username = client.get('username')
             password = client.get('password')
             
-            await send_log(f"Processing client: {firm_name}", "info")
+            # Setup dynamic download directory if auto_organise is checked
+            client_dir = os.path.join(save_location, firm_name, fy) if auto_organise else save_location
+            if auto_organise and not os.path.exists(client_dir):
+                os.makedirs(client_dir)
+            
+            # Update Chrome pref on the fly for the active session
+            state.driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+                "behavior": "allow",
+                "downloadPath": client_dir
+            })
+            
+            await send_log(f"Processing client: {firm_name} (Saving to: {client_dir})", "info")
             await send_progress(firm_name, 0, total_files)
             
             state.driver.get("https://services.gst.gov.in/services/login")
@@ -194,7 +207,12 @@ async def process_downloads(payload):
                         while state.pause_requested and not state.stop_requested:
                             await asyncio.sleep(1)
                             
-                        await send_log(f"Downloading {ret} for {month} FY {fy}...", "info")
+                        format_str = f" [{download_format}]" if download_format != 'All' else ""
+                        await send_log(f"Downloading {ret} for {month} FY {fy}{format_str}...", "info")
+                        
+                        # --- Selenium Format specific download logic goes here --- 
+                        # E.g: if download_format in ['All', 'Excel']: click_excel_btn()
+                        
                         await asyncio.sleep(2) 
                         completed += 1
                         await send_progress(firm_name, 1, total_files)

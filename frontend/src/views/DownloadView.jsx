@@ -34,12 +34,22 @@ const DownloadView = () => {
 
     // Settings State
     const [fy, setFy] = useState('2024-25');
+    const [format, setFormat] = useState('All');
     const [selectedReturns, setSelectedReturns] = useState([]);
     const [selectedMonths, setSelectedMonths] = useState([]);
     const [autoOrganise, setAutoOrganise] = useState(true);
+    const [saveLocation, setSaveLocation] = useState('C:\\GST_Downloads');
 
     useEffect(() => {
         setClients(getClients());
+        try {
+            const settings = JSON.parse(localStorage.getItem('gst_app_settings'));
+            if (settings) {
+                if (settings.saveLocation) setSaveLocation(settings.saveLocation);
+                if (settings.defaultFy) setFy(settings.defaultFy);
+                if (settings.autoOrganise !== undefined) setAutoOrganise(settings.autoOrganise);
+            }
+        } catch(e){}
     }, []);
 
     // Filter Logic
@@ -77,6 +87,8 @@ const DownloadView = () => {
             returns: selectedReturns,
             months: selectedMonths,
             fy,
+            format,
+            saveLocation,
             autoOrganise
         };
 
@@ -162,6 +174,16 @@ const DownloadView = () => {
                     </div>
 
                     <div className="form-group mb-6">
+                        <label>Format</label>
+                        <select className="input-field" value={format} onChange={e => setFormat(e.target.value)}>
+                            <option value="All">All Formats</option>
+                            <option value="PDF">PDF Only</option>
+                            <option value="Excel">Excel Only</option>
+                            <option value="JSON">JSON Only</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group mb-6">
                         <label className="flex-between">
                             Return Types
                             <span className="text-sm text-muted">{selectedReturns.length} selected</span>
@@ -219,7 +241,7 @@ const DownloadView = () => {
                         <label>Save Location</label>
                         <div className="flex-between mt-2">
                             <Folder size={16} className="text-muted" />
-                            <span className="text-sm truncate">C:\GST_Downloads</span>
+                            <span className="text-sm truncate" title={saveLocation}>{saveLocation}</span>
                         </div>
 
                         <label className="checkbox-label mt-4">
