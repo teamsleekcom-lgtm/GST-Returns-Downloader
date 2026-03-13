@@ -391,15 +391,49 @@ async def process_downloads(payload):
                                 if download_link:
                                     # Use JS click to avoid 'element not interactable' errors if it's slightly hidden
                                     state.driver.execute_script("arguments[0].click();", download_link)
-                                    await send_log(f"Triggered Excel file download for {ret}", "success")
-                                    await asyncio.sleep(12)  # Wait for file to physically download to disk (Increased for larger zipped returns)
+                                    await send_log(f"Triggered Excel file download for {ret}", "info")
+                                    
+                                    # Intelligent Download Polling
+                                    # Wait for the file to physically hit the disk and finish downloading
+                                    await asyncio.sleep(2) # Give Chrome a second to create the .crdownload temp file
+                                    download_timeout = time.time() + 60
+                                    download_finished = False
+                                    while time.time() < download_timeout:
+                                        # Check if there are any active Chrome downloads in the folder
+                                        active_downloads = [f for f in os.listdir(client_dir) if f.endswith('.crdownload') or f.endswith('.tmp')]
+                                        if not active_downloads:
+                                            # Also check if ANY new files actually arrived in the last 60 seconds (roughly)
+                                            # We just assume it finished if .crdownload is gone.
+                                            download_finished = True
+                                            break
+                                        await asyncio.sleep(1)
+                                        
+                                    if download_finished:
+                                        await send_log(f"Verified Excel download complete for {ret}", "success")
+                                    else:
+                                        await send_log(f"Excel download timed out or may be incomplete for {ret}", "warning")
+                                        
                                 else:
                                     # Try a fallback blind click on 'Download Excel' if it's one of those immediate buttons
                                     try:
                                         fallback_btn = state.driver.find_element(By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')]")
                                         state.driver.execute_script("arguments[0].click();", fallback_btn)
-                                        await send_log(f"Triggered direct Excel download for {ret}", "success")
-                                        await asyncio.sleep(12)
+                                        await send_log(f"Triggered direct Excel download for {ret}", "info")
+                                        
+                                        await asyncio.sleep(2)
+                                        download_timeout = time.time() + 60
+                                        download_finished = False
+                                        while time.time() < download_timeout:
+                                            active_downloads = [f for f in os.listdir(client_dir) if f.endswith('.crdownload') or f.endswith('.tmp')]
+                                            if not active_downloads:
+                                                download_finished = True
+                                                break
+                                            await asyncio.sleep(1)
+                                            
+                                        if download_finished:
+                                            await send_log(f"Verified Excel download complete for {ret}", "success")
+                                        else:
+                                            await send_log(f"Excel download timed out or may be incomplete for {ret}", "warning")
                                     except:
                                         await send_log(f"Excel generation for {ret} is taking too long or file not found. Skipping.", "warning")
                                     
