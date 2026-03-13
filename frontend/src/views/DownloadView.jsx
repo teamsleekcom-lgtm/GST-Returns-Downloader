@@ -34,7 +34,7 @@ const DownloadView = () => {
 
     // Settings State
     const [fy, setFy] = useState('2024-25');
-    const [format, setFormat] = useState('All');
+    const [format, setFormat] = useState('Excel'); // Hardcoded to Excel per user request
     const [selectedReturns, setSelectedReturns] = useState([]);
     const [selectedMonths, setSelectedMonths] = useState([]);
     const [autoOrganise, setAutoOrganise] = useState(true);
@@ -170,16 +170,6 @@ const DownloadView = () => {
                             <option value="2024-25">2024-25</option>
                             <option value="2023-24">2023-24</option>
                             <option value="2022-23">2022-23</option>
-                        </select>
-                    </div>
-
-                    <div className="form-group mb-6">
-                        <label>Format</label>
-                        <select className="input-field" value={format} onChange={e => setFormat(e.target.value)}>
-                            <option value="All">All Formats</option>
-                            <option value="PDF">PDF Only</option>
-                            <option value="Excel">Excel Only</option>
-                            <option value="JSON">JSON Only</option>
                         </select>
                     </div>
 

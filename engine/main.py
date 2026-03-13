@@ -307,68 +307,63 @@ async def process_downloads(payload):
                                 
                             target_card = return_cards[0]
                             
-                            # If 'All' formats or 'PDF', fetch the PDF summary FIRST
-                            # Doing this first allows us to return to the dashboard and trigger Excel/JSON next.
-                            if download_format in ['All', 'PDF']:
+                            # --- EXCEL DOWNLOAD ONLY ---
+                            try:
+                                # Look for "Prepare Offline" or "Download" 
+                                offline_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare offline') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]")
+                                offline_btn.click()
+                                await asyncio.sleep(4)
+                                
+                                # Once on the offline page, look for existing download links OR click generate
+                                dl_link_xpath = "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'click here to download') and contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'excel') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'click here to download - file')]"
+                                
+                                download_link = None
                                 try:
-                                    view_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare online') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'view')]")
-                                    view_btn.click()
-                                    await asyncio.sleep(5) # wait for summary page to render completely
+                                    download_link = state.driver.find_element(By.XPATH, dl_link_xpath)
+                                except:
+                                    pass
                                     
-                                    # Print to PDF via CDP
-                                    pdf_data = state.driver.execute_cdp_cmd("Page.printToPDF", {
-                                        "landscape": False, "displayHeaderFooter": False, "printBackground": True, "preferCSSPageSize": True
-                                    })
-                                    import base64
-                                    pdf_bytes = base64.b64decode(pdf_data['data'])
-                                    with open(os.path.join(client_dir, f"{ret}_{month}_{fy}.pdf"), "wb") as f:
-                                        f.write(pdf_bytes)
-                                    await send_log(f"Generated PDF summary for {ret}", "success")
+                                if not download_link:
+                                    # Click generate excel if no direct download link is there yet
+                                    try:
+                                        excel_btn = WebDriverWait(state.driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel')]")))
+                                        excel_btn.click()
+                                        await send_log(f"Requested Excel generation for {ret}. Waiting for file...", "info")
+                                    except:
+                                        # It might be a direct 'DOWNLOAD EXCEL' button without a 'click here' hyperlink later (like GSTR-2B sometimes)
+                                        pass
                                     
-                                    # If 'All', we need to go back to Dashboard for the next format step
-                                    if download_format == 'All':
-                                        state.driver.get("https://services.gst.gov.in/services/returnsdashboard")
+                                    # Poll for the download link to appear (Wait up to 45 seconds)
+                                    target_time = time.time() + 45
+                                    while time.time() < target_time:
+                                        try:
+                                            # Also check if it instantly downloaded and there's no link
+                                            link = state.driver.find_element(By.XPATH, dl_link_xpath)
+                                            if link.is_displayed():
+                                                download_link = link
+                                                break
+                                        except:
+                                            pass
+                                            
+                                        # Wait a few seconds before checking again
                                         await asyncio.sleep(3)
-                                        # Re-select period
-                                        WebDriverWait(state.driver, 10).until(EC.presence_of_element_located((By.ID, "finYear")))
-                                        for opt in state.driver.find_element(By.ID, "finYear").find_elements(By.TAG_NAME, "option"):
-                                            if fy in opt.text: opt.click(); break
-                                        await asyncio.sleep(1)
-                                        for opt in state.driver.find_element(By.ID, period_select_id).find_elements(By.TAG_NAME, "option"):
-                                            opt_text = state.driver.execute_script("return arguments[0].textContent;", opt) or opt.text
-                                            if month_long.lower() in opt_text.lower() or month.lower() in opt_text.lower(): opt.click(); break
-                                        smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=10)
-                                        await asyncio.sleep(4)
-                                        # Re-find card
-                                        return_cards = state.driver.find_elements(By.XPATH, f"//div[contains(@class, 'col-sm-') and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'gstr-{ret.lower()}')]")
-                                        if return_cards: target_card = return_cards[0]
-                                except Exception as e:
-                                    await send_log(f"Could not generate PDF for {ret}: {str(e)}", "warning")
-                            
-                            # Excel & JSON
-                            if download_format in ['All', 'Excel', 'JSON']:
-                                try:
-                                    offline_btn = target_card.find_element(By.XPATH, ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'prepare offline') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]")
-                                    offline_btn.click()
-                                    await asyncio.sleep(3)
+                                
+                                if download_link:
+                                    download_link.click()
+                                    await send_log(f"Triggered Excel file download for {ret}", "success")
+                                    await asyncio.sleep(8)  # Wait for file to physically download to disk
+                                else:
+                                    # Try a fallback blind click on 'Download Excel' if it's one of those immediate buttons
+                                    try:
+                                        fallback_btn = state.driver.find_element(By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')]")
+                                        fallback_btn.click()
+                                        await send_log(f"Triggered direct Excel download for {ret}", "success")
+                                        await asyncio.sleep(8)
+                                    except:
+                                        await send_log(f"Excel generation for {ret} is taking too long or file not found. Skipping.", "warning")
                                     
-                                    if download_format in ['All', 'JSON']:
-                                        try:
-                                            json_btn = WebDriverWait(state.driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate json') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download json')]")))
-                                            json_btn.click()
-                                            await send_log(f"Triggered JSON download for {ret}", "success")
-                                            await asyncio.sleep(2)
-                                        except: pass
-                                        
-                                    if download_format in ['All', 'Excel']:
-                                        try:
-                                            excel_btn = WebDriverWait(state.driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'generate excel') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')]")))
-                                            excel_btn.click()
-                                            await send_log(f"Triggered Excel download for {ret}", "success")
-                                            await asyncio.sleep(2)
-                                        except: pass
-                                except Exception as e:
-                                    await send_log(f"Could not find offline/download options for {ret}: {str(e)}", "warning")
+                            except Exception as e:
+                                await send_log(f"Could not prepare offline Excel for {ret}: {str(e)}", "warning")
                                 
                         except Exception as e:
                             await send_log(f"Navigation error for {ret} - {month}: {str(e)}", "error")
