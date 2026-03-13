@@ -47,7 +47,10 @@ state = EngineState()
 
 def init_driver(download_dir):
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
+    # Instead of strict headless (which breaks JS/blob downloads on gov portals),
+    # we use a massive negative window position to simulate a hidden background process
+    # without triggering Chrome's headless anti-bot or download restrictions.
+    options.add_argument("--window-position=-32000,-32000")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
@@ -59,7 +62,8 @@ def init_driver(download_dir):
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "plugins.always_open_pdf_externally": True,
-        "safebrowsing.enabled": True
+        "safebrowsing.enabled": True,
+        "profile.default_content_settings.popups": 0
     }
     options.add_experimental_option("prefs", prefs)
     
@@ -159,6 +163,15 @@ async def process_downloads(payload):
                 "behavior": "allow",
                 "downloadPath": client_dir
             })
+            # Also use Browser level to ensure Blob/JS initiated downloads work
+            try:
+                state.driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
+                    "behavior": "allow",
+                    "downloadPath": client_dir,
+                    "eventsEnabled": True
+                })
+            except:
+                pass
             
             await send_log(f"Processing client: {firm_name} (Saving to: {client_dir})", "info")
             await send_progress(firm_name, 0, total_files)
