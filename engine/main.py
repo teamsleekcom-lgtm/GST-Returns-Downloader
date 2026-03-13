@@ -177,11 +177,15 @@ async def process_downloads(payload):
             await send_progress(firm_name, 0, total_files)
             
             state.driver.get("https://services.gst.gov.in/services/login")
-            await asyncio.sleep(2)
             
             try:
+                # Wait for the login page to fully load and expose the username field (up to 30 seconds)
+                user_field = WebDriverWait(state.driver, 30).until(
+                    EC.presence_of_element_located((By.ID, "username"))
+                )
+                
                 # Basic login fill
-                state.driver.find_element(By.ID, "username").send_keys(username)
+                user_field.send_keys(username)
                 state.driver.find_element(By.ID, "user_pass").send_keys(password)
                 
                 # Get Captcha Image B64
