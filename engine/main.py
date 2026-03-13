@@ -167,10 +167,29 @@ async def process_downloads(payload):
                 # Get Captcha Image B64
                 captcha_b64 = ""
                 try:
-                    cap_img = WebDriverWait(state.driver, 5).until(EC.presence_of_element_located((By.XPATH, "//img[contains(@src, 'captcha') or contains(@id, 'captcha') or contains(@id, 'imgCaptcha')]")))
+                    # Wait for image to actively load, not just be present
+                    cap_img = WebDriverWait(state.driver, 10).until(
+                        EC.visibility_of_element_located((By.XPATH, "//img[contains(@src, 'captcha') or contains(@id, 'captcha') or contains(@id, 'imgCaptcha')]"))
+                    )
+                    await asyncio.sleep(1) # Give it a second to render fully
+                    
+                    # Try native screenshot first
                     captcha_b64 = cap_img.screenshot_as_base64
+                    
+                    # If blank or extremely small, fallback to JavaScript canvas extraction
+                    if not captcha_b64 or len(captcha_b64) < 1000:
+                        captcha_b64 = state.driver.execute_script("""
+                            var img = arguments[0];
+                            var canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            var ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            return canvas.toDataURL('image/png').substring(22);
+                        """, cap_img)
+                        
                 except Exception as e:
-                    await send_log("Could not extract Captcha image visually, check browser.", "warning")
+                    await send_log(f"Could not extract Captcha image visually: {str(e)}", "warning")
                 
                 # Request Captcha from user via UI
                 captcha_val = await request_captcha(captcha_b64)
@@ -227,31 +246,49 @@ async def process_downloads(payload):
                             
                             # Select Financial Year
                             fy_select = state.driver.find_element(By.ID, "finYear")
-                            for option in fy_select.find_elements(By.TAG_NAME, "option"):
-                                if fy in option.text:
-                                    option.click()
-                                    break
+                            options = fy_select.find_elements(By.TAG_NAME, "option")
+                            for option in options:
+                                try:
+                                    if fy in option.text:
+                                        option.click()
+                                        break
+                                except StaleElementReferenceException:
+                                    pass # Ignore stale options during iteration
                                     
-                            await asyncio.sleep(1) # Let period dropdown update
+                            await asyncio.sleep(2) # Wait for page/period dropdown to update via Ajax
                             
                             # Select Month/Quarter
-                            period_select = state.driver.find_element(By.ID, "taxPeriod")
+                            # Need to handle exact matching carefully because portal might refresh the dropdown
+                            period_select_id = "taxPeriod"
+                            WebDriverWait(state.driver, 10).until(EC.presence_of_element_located((By.ID, period_select_id)))
+                            
                             month_long = {"Apr": "April", "May": "May", "Jun": "June", "Jul": "July", "Aug": "August", "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December", "Jan": "January", "Feb": "February", "Mar": "March"}.get(month, month)
                             
                             found_period = False
-                            for option in period_select.find_elements(By.TAG_NAME, "option"):
-                                if month_long.lower() in option.text.lower() or month.lower() in option.text.lower():
-                                    option.click()
-                                    found_period = True
-                                    break
+                            period_select = state.driver.find_element(By.ID, period_select_id)
+                            period_options = period_select.find_elements(By.TAG_NAME, "option")
+                            
+                            for option in period_options:
+                                try:
+                                    # Use JS to get text safely to avoid some stale ref issues on rapid dropdown updates
+                                    opt_text = state.driver.execute_script("return arguments[0].textContent;", option)
+                                    if not opt_text: opt_text = option.text
+                                    
+                                    if month_long.lower() in opt_text.lower() or month.lower() in opt_text.lower():
+                                        option.click()
+                                        found_period = True
+                                        break
+                                except StaleElementReferenceException:
+                                    continue
                                     
                             if not found_period:
                                 await send_log(f"Could not find period {month} for {fy}. Skipping.", "warning")
                                 continue
                                 
+                            await asyncio.sleep(1)
                             # Click Search
-                            smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=5)
-                            await asyncio.sleep(3) # Wait for results table
+                            smart_click(state.driver, By.XPATH, "//button[contains(text(), 'Search')]", timeout=10)
+                            await asyncio.sleep(4) # Wait for results table
                             
                             # Look for the specific Return box (e.g., GSTR-1, GSTR-3B)
                             # The portal has "cards" for each return type. We look for the one containing the return name.
