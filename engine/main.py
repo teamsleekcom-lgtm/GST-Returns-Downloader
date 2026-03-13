@@ -389,51 +389,90 @@ async def process_downloads(payload):
                                         await asyncio.sleep(3)
                                 
                                 if download_link:
+                                    # Ensure CDP download path is confirmed before triggering click
+                                    await asyncio.sleep(0.5)
                                     # Use JS click to avoid 'element not interactable' errors if it's slightly hidden
                                     state.driver.execute_script("arguments[0].click();", download_link)
                                     await send_log(f"Triggered Excel file download for {ret}", "info")
                                     
-                                    # Intelligent Download Polling
-                                    # Wait for the file to physically hit the disk and finish downloading
-                                    await asyncio.sleep(2) # Give Chrome a second to create the .crdownload temp file
+                                    # --- SNAPSHOT: Record all files already in the folder BEFORE the download ---
+                                    pre_download_files = set(os.listdir(client_dir))
+
+                                    # Give Chrome 3 seconds to either create a .crdownload OR finish an instant download
+                                    await asyncio.sleep(3)
+
                                     download_timeout = time.time() + 60
                                     download_finished = False
+                                    
                                     while time.time() < download_timeout:
-                                        # Check if there are any active Chrome downloads in the folder
-                                        active_downloads = [f for f in os.listdir(client_dir) if f.endswith('.crdownload') or f.endswith('.tmp')]
-                                        if not active_downloads:
-                                            # Also check if ANY new files actually arrived in the last 60 seconds (roughly)
-                                            # We just assume it finished if .crdownload is gone.
+                                        current_files = set(os.listdir(client_dir))
+                                        active_downloads = [f for f in current_files if f.endswith('.crdownload') or f.endswith('.tmp')]
+                                        new_completed_files = [
+                                            f for f in current_files - pre_download_files
+                                            if f.endswith('.zip') or f.endswith('.xlsx')
+                                        ]
+
+                                        if active_downloads:
+                                            # Download is actively running, keep waiting
+                                            await asyncio.sleep(1)
+                                            continue
+
+                                        if new_completed_files:
+                                            # A real new file appeared — genuine success
                                             download_finished = True
+                                            await send_log(f"Verified Excel download complete for {ret}: {new_completed_files[0]}", "success")
                                             break
-                                        await asyncio.sleep(1)
                                         
-                                    if download_finished:
-                                        await send_log(f"Verified Excel download complete for {ret}", "success")
-                                    else:
-                                        await send_log(f"Excel download timed out or may be incomplete for {ret}", "warning")
+                                        # No .crdownload AND no new file = silent abort (the bug)
+                                        await send_log(f"Silent download failure detected for {ret} — Chrome dropped the request. No file was created.", "warning")
+                                        break
+
+                                    if not download_finished:
+                                        await send_log(f"Excel download failed or timed out for {ret}. Folder contents unchanged.", "warning")
                                         
                                 else:
                                     # Try a fallback blind click on 'Download Excel' if it's one of those immediate buttons
                                     try:
                                         fallback_btn = state.driver.find_element(By.XPATH, "//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download excel')]")
+                                        # Ensure CDP download path is confirmed before triggering click
+                                        await asyncio.sleep(0.5)
                                         state.driver.execute_script("arguments[0].click();", fallback_btn)
                                         await send_log(f"Triggered direct Excel download for {ret}", "info")
                                         
-                                        await asyncio.sleep(2)
+                                        # --- SNAPSHOT: Record all files already in the folder BEFORE the download ---
+                                        pre_download_files = set(os.listdir(client_dir))
+
+                                        # Give Chrome 3 seconds to either create a .crdownload OR finish an instant download
+                                        await asyncio.sleep(3)
+
                                         download_timeout = time.time() + 60
                                         download_finished = False
+                                        
                                         while time.time() < download_timeout:
-                                            active_downloads = [f for f in os.listdir(client_dir) if f.endswith('.crdownload') or f.endswith('.tmp')]
-                                            if not active_downloads:
+                                            current_files = set(os.listdir(client_dir))
+                                            active_downloads = [f for f in current_files if f.endswith('.crdownload') or f.endswith('.tmp')]
+                                            new_completed_files = [
+                                                f for f in current_files - pre_download_files
+                                                if f.endswith('.zip') or f.endswith('.xlsx')
+                                            ]
+
+                                            if active_downloads:
+                                                # Download is actively running, keep waiting
+                                                await asyncio.sleep(1)
+                                                continue
+
+                                            if new_completed_files:
+                                                # A real new file appeared — genuine success
                                                 download_finished = True
+                                                await send_log(f"Verified Excel download complete for {ret}: {new_completed_files[0]}", "success")
                                                 break
-                                            await asyncio.sleep(1)
                                             
-                                        if download_finished:
-                                            await send_log(f"Verified Excel download complete for {ret}", "success")
-                                        else:
-                                            await send_log(f"Excel download timed out or may be incomplete for {ret}", "warning")
+                                            # No .crdownload AND no new file = silent abort (the bug)
+                                            await send_log(f"Silent download failure detected for {ret} — Chrome dropped the request. No file was created.", "warning")
+                                            break
+
+                                        if not download_finished:
+                                            await send_log(f"Excel download failed or timed out for {ret}. Folder contents unchanged.", "warning")
                                     except:
                                         await send_log(f"Excel generation for {ret} is taking too long or file not found. Skipping.", "warning")
                                     
